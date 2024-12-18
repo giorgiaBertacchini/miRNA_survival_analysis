@@ -1,0 +1,19 @@
+# Ignora file di log
+*.log
+
+# Ignore .idea directory
+.idea/
+
+# Ignora cartella di build
+/build/
+
+# Ignore datasets
+/datasets/
+
+# Ignora file temporanei di editor
+.vscode/
+*.swp
+
+# Ignora file specifici di sistema
+.DS_Store
+Thumbs.db
