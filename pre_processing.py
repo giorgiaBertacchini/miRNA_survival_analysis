@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import json
 
 
 def import_xml(file_path):
@@ -47,7 +48,14 @@ def main():
                #import_txt(f"./datasets/clinical_data/{subfolder}/{file}") # TODO: serve?
     print(clinical_df)
 
+    df_clinical_json = pd.read_json('datasets/clinical_data(json&manifest)/files.2024-12-12.json')
+    print(df_clinical_json.columns)
+    print(df_clinical_json[['cases', 'file_name']].head())
+    print(df_clinical_json['cases'].head())
+    print(f"'data_category' unique: {df_clinical_json['data_category'].unique()}")
+    print(df_clinical_json['data_format'].unique())
+    print(df_clinical_json.shape)
+
 
 if __name__ == "__main__":
     main()
-
