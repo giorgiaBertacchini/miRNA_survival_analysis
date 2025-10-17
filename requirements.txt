@@ -1,2 +1,7 @@
 pandas
-lxml (not used)
+numpy
+scikit-learn
+torch
+matplotlib
+skorch
+umap-learn
