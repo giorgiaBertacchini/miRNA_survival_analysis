@@ -1,0 +1,6 @@
+configurazioni interessanti iper-parametri
+
+(num_years_per_bin = 1, lr 0.001)
+(num_years_per_bin = 3, lr 0.001)
+(num_years_per_bin = 5, lr 0.005)
+(num_years_per_bin = 3, lr 0.01)

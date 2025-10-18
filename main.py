@@ -1,10 +1,12 @@
 from scripts.linear_simple import MiRNANet_3, MiRNANet_5, MiRNADataset
+from scripts.plotter import Plotter
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 import torch.nn as nn
-import torch
+from sklearn.preprocessing import OneHotEncoder
 
 
 DATA_PATH = './datasets/preprocessed/final_merged_clinical_miRNA.csv'
@@ -37,6 +39,9 @@ tot_num_classes = (max_age - min_age) // years_per_class
 y = df["age_at_initial_pathologic_diagnosis"].values
 y = create_age_classes(y, years_per_class=years_per_class, min_age=min_age)
 
+encoder = OneHotEncoder(categories=[np.arange(tot_num_classes)], sparse_output=False)
+y = encoder.fit_transform(y.reshape(-1, 1))
+
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -52,3 +57,11 @@ model_1 = MiRNANet_3(input_dim, tot_num_classes, start_lr=0.0001)
 
 model_1_res = model_1.loop(train_loader, test_loader, epochs=200)
 # model_2_res = model_2.loop(epochs=150)
+
+plotter = Plotter()
+
+plotter.plot_real_vs_predicted(np.argmax(model_1_res['trues'], axis=1), np.argmax(model_1_res['preds'], axis=1))
+plotter.plot_losses_zoom(model_1_res['train_losses'], model_1_res['eval_losses'])
+plotter.plot_losses_zoom(model_1_res['train_accs'], model_1_res['val_accs'])
+
+print('ciao')

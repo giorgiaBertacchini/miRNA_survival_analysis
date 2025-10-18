@@ -3,47 +3,53 @@ from torch.utils.data import Dataset
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error, accuracy_score
 
 
 class MiRNADataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32).view(-1, 1)  # Porta a vettore colonna
+        self.y = torch.tensor(y, dtype=torch.float32)  
     def __len__(self):
         return len(self.X)
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
 
 class MiRNANet_3(nn.Module):
-    def __init__(self, input_dim, output_dim, start_lr=0.001):
+    def __init__(self, input_dim, output_dim, start_lr=0.001, lr_decay=0.3, patience=15):
         super(MiRNANet_3, self).__init__()
         self.model = nn.Sequential(
-            nn.Linear(input_dim, 128),
-            nn.BatchNorm1d(128),
+            nn.Linear(input_dim, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(128, 64),
+            nn.Linear(64, 32),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(64, output_dim)  # <--- ultimo layer lineare
+            nn.Linear(32, output_dim),
+            nn.Softmax(-1)
         )
+        self.lr_decay = lr_decay
+        self.patience = patience
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=start_lr)
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.L1Loss()
         self.scheduler = ReduceLROnPlateau(
             self.optimizer,
             mode='min',        # riduce LR quando la metrica (loss) smette di diminuire
-            factor=0.6,        # dimezza il learning rate
-            patience=15        # aspetta 10 epoche senza miglioramenti
+            factor=self.lr_decay,        # dimezza il learning rate
+            patience=self.patience        # aspetta 10 epoche senza miglioramenti
         )
     def forward(self, x):
         return self.model(x)   
     def loop(self, train_loader, test_loader, epochs=100):
         train_losses = []
         val_losses = []
+        train_accs = []
+        val_accs = []
         for epoch in range(epochs):
             self.model.train()
             total_train_loss = 0
+            total_train_acc = 0
             for X_batch, y_batch in train_loader:
                 self.optimizer.zero_grad()
                 outputs = self.model(X_batch)
@@ -52,12 +58,18 @@ class MiRNANet_3(nn.Module):
                 loss.backward()
                 self.optimizer.step()
                 total_train_loss += loss.item()
+                total_train_acc += accuracy_score(np.argmax(outputs.detach().numpy(), axis=1), np.argmax(y_batch, axis=1))
             
             avg_train_loss = total_train_loss / len(train_loader)
+            avg_train_acc = total_train_acc / len(train_loader)
+            
             self.scheduler.step(avg_train_loss)
+
+            train_accs.append(avg_train_acc)
 
             self.model.eval()
             total_val_loss = 0
+            total_val_acc = 0
             with torch.no_grad():
                 preds = []
                 trues = []
@@ -66,22 +78,30 @@ class MiRNANet_3(nn.Module):
                     loss = self.criterion(outputs, y_batch)
                     preds.append(outputs.numpy())
                     trues.append(y_batch.numpy())
+                    total_val_loss += loss.item()
+                    total_val_acc += accuracy_score(np.argmax(outputs.detach().numpy(), axis=1), np.argmax(y_batch, axis=1))
                 preds = np.vstack(preds)
                 trues = np.vstack(trues)
-                total_val_loss += loss.item()
             avg_val_loss = total_val_loss / len(test_loader)
+            avg_val_acc = total_val_acc / len(test_loader)
 
             train_losses.append(avg_train_loss)
             val_losses.append(avg_val_loss)
 
-            print(f"Epoch {epoch+1:03d} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
-            mae = mean_absolute_error(trues, np.argmax(preds, axis=1))
+            val_accs.append(avg_val_acc)
+
+            print(f"Epoch {epoch+1:03d}:\nTrain Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}\nTrain Acc: {avg_train_acc:.4f} | Val Acc: {avg_val_acc:.4f}")
+            mae = mean_absolute_error(trues, preds)
             print(f"Test MAE: {mae:.2f}")
 
         model_res = {
             'params':self.model.parameters(),
             'train_losses':train_losses,
-            'eval_losses': val_losses
+            'eval_losses': val_losses,
+            'train_accs': train_accs,
+            'val_accs':val_accs,
+            'preds':preds,
+            'trues':trues
         }
 
         return model_res
