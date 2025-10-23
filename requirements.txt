@@ -6,3 +6,5 @@ matplotlib
 skorch
 umap-learn
 pybiomart
+biopython
+rnanorm
