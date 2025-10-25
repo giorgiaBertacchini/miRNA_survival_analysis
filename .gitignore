@@ -8,9 +8,8 @@
 /build/
 
 # Ignore datasets
-/datasets/
-!/datasets/preprocessed
-!/datasets/preprocessed/**
+/datasets/*
+!datasets/preprocessed/
 
 # Ignora file temporanei di editor
 .vscode/
