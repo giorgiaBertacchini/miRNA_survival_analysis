@@ -9,6 +9,8 @@
 
 # Ignore datasets
 /datasets/
+!/datasets/preprocessed
+!/datasets/preprocessed/**
 
 # Ignora file temporanei di editor
 .vscode/
