@@ -8,3 +8,4 @@ umap-learn
 pybiomart
 biopython
 rnanorm
+scikit-survival
