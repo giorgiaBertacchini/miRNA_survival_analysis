@@ -9,3 +9,5 @@ pybiomart
 biopython
 rnanorm
 scikit-survival
+pycox
+lifelines
