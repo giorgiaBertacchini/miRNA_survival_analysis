@@ -11,3 +11,4 @@ rnanorm
 scikit-survival
 pycox
 lifelines
+sklearn-pandas
