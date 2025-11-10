@@ -16,7 +16,8 @@ from sklearn.metrics import mean_absolute_error, r2_score, make_scorer
 
 from skorch import NeuralNetRegressor
 from skorch.callbacks import LRScheduler, EarlyStopping
-from lifelines.utils import concordance_index
+
+from sksurv.metrics import concordance_index_censored
 
 from networks import Net_3layers, Net_5layers
 
@@ -119,23 +120,6 @@ def save_model(model, with_clinical, folder, best_params, best_score, file):
         f.write("=====================================\n")
 
 
-##################
-# Save Test Data #
-##################
-def save_test_data(X_test, y_test, with_clinical, folder):
-    os.makedirs(f'../datasets/test/mlp/{folder}', exist_ok=True)
-
-    if with_clinical:
-        X_path = f'../datasets/test/mlp/{folder}/X_test_clinical.csv'
-        y_path = f'../datasets/test/mlp/{folder}/y_test_clinical.csv'
-    else:
-        X_path = f'../datasets/test/mlp/{folder}/X_test_no_clinical.csv'
-        y_path = f'../datasets/test/mlp/{folder}/y_test_no_clinical.csv'
-
-    pd.DataFrame(X_test).to_csv(X_path, index=False)
-    pd.DataFrame(y_test).to_csv(y_path, index=False)
-
-
 ################
 # Prepare Data #
 ################
@@ -163,7 +147,9 @@ def prepare_data(dataset_path, with_clinical):
             y.append(np.array((False, row['days_to_last_followup'].item()), dtype=custom_dtype))
     y = np.array(y)
 
-    y = y['days']
+    death = y['death']
+    days = y['days']
+    y_signed = np.where(death, days, -days)
 
     #############
     # Z-scaling #
@@ -185,7 +171,7 @@ def prepare_data(dataset_path, with_clinical):
     ##################
     # Data splitting #
     ##################
-    X_train, X_test, y_train, y_test = train_test_split(scaled_X, y, test_size=0.2, random_state=SEED)
+    X_train, X_test, y_train, y_test = train_test_split(scaled_X, y_signed, test_size=0.2, random_state=SEED)
 
     X_mlp = X_train.values.astype('float32')
     y_mlp = y_train.astype('float32')
@@ -206,7 +192,7 @@ def network(mlp_class, device, X_mlp):
         batch_size=32,
         optimizer=torch.optim.AdamW,
         optimizer__weight_decay=1e-6,
-        criterion=nn.MSELoss(),  # nn.MSELoss(),# CoxPHLoss(), # nn.SmoothL1Loss(beta=beta_value), #nn.L1Loss(),
+        criterion=nn.MSELoss(),
         device=device,
         iterator_train__drop_last=True,  # To ensure consistent batch sizes
         callbacks=[
@@ -257,9 +243,12 @@ def network(mlp_class, device, X_mlp):
 
 
 def grid_search(mlp_class, X_mlp, y_mlp, device, kfold):
-    def cindex_scorer(y_true, y_pred):
-        return concordance_index(y_true, -y_pred.ravel())
-    cindex = make_scorer(cindex_scorer, greater_is_better=True)
+    """def c_index_scorer(y_true, y_pred):
+        events = y_true > 0
+        times = np.abs(y_true)
+        return concordance_index_censored(events, times, y_pred)[0]
+
+    cindex = make_scorer(c_index_scorer, greater_is_better=True)"""
 
     net, params = network(mlp_class, device, X_mlp)
 
@@ -269,7 +258,6 @@ def grid_search(mlp_class, X_mlp, y_mlp, device, kfold):
         refit=True,
         cv=kfold,
         #scoring=cindex,  # If MSE Loss, comment this
-        scoring='r2',
         verbose=1,
         n_jobs=1
     )
@@ -284,9 +272,6 @@ def grid_search(mlp_class, X_mlp, y_mlp, device, kfold):
 def flow(data_type, with_clinical, device, kfold):
     dataset_path = os.path.join(DATA_PATH, AVAILABLE_DATASETS[data_type])
     X_mlp, y_mlp, X_test_mlp, y_test_mlp = prepare_data(dataset_path, with_clinical)
-
-    print(f"Saving test data for {data_type} ({'with' if with_clinical else 'without'} clinical data)")
-    save_test_data(X_test_mlp, y_test_mlp, with_clinical, data_type)
 
     print(f"[Net_3layers] Starting processing {data_type} ({'with' if with_clinical else 'without'} clinical data)")
     best_model, best_params, best_score = grid_search(Net_3layers, X_mlp, y_mlp, device, kfold)
