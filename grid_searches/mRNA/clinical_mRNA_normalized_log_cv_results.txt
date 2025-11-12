@@ -1,0 +1,38 @@
+Finished training cen_best:
+	CoxnetSurvivalAnalysis(alpha_min_ratio=0.01, alphas=[0.04449831027895047],
+                       l1_ratio=0.3)
+Test c-index: 0.6129476584022039
+Kept 197 variables for infer:
+Index(['age_at_initial_pathologic_diagnosis', 'gene.TFPI', 'gene.MYH13',
+       'gene.MATK', 'gene.OTC', 'gene.CYP46A1', 'gene.CASR', 'gene.GUCA2B',
+       'gene.ITIH1', 'gene.SNAP91',
+       ...
+       'gene.ZIM2', 'gene.DGKK', 'gene.TMEM272', 'gene.TEX13D', 'gene.CCDC201',
+       'gene.FAM95C', 'gene.PERCC1', 'gene.EEF1AKMT4', 'gene.AC132217.2',
+       'gene.AC090517.4'],
+      dtype='object', length=197)Beginning cross validation on test
+Cross validation scores: [0.69565217 0.61490683 0.57017544 0.45887446 0.76086957 0.59782609
+ 0.43918919 0.8        0.75409836 0.4137931 ]
+Cross validation average: 0.6105385209149246
+
+Finished training cen_best:
+	CoxnetSurvivalAnalysis(alpha_min_ratio=0.01, alphas=[0.0981245918698573],
+                       l1_ratio=0.3)
+Test c-index: 0.6336088154269972
+Kept 50 variables for infer:
+Index(['gene.MYH13', 'gene.MATK', 'gene.SNAP91', 'gene.CPT1A', 'gene.TNP1',
+       'gene.NPY', 'gene.NFE2', 'gene.RAC2', 'gene.CCNA1', 'gene.MRO',
+       'gene.GRHL1', 'gene.ADAMTS8', 'gene.SLC25A47', 'gene.GTF2H2',
+       'gene.SLC16A2', 'gene.ZIC3', 'gene.SUSD3', 'gene.ICA1L', 'gene.NPY1R',
+       'gene.ADAM9', 'gene.UGT3A2', 'gene.NSG1', 'gene.VCX3A', 'gene.PCSK9',
+       'gene.BOLA2B', 'gene.HOXD12', 'gene.ANKK1', 'gene.CEL', 'gene.SHCBP1',
+       'gene.ARPP21', 'gene.LONRF3', 'gene.ALX1', 'gene.DEFB119', 'gene.H2AW',
+       'gene.SHISAL2A', 'gene.TNFRSF18', 'gene.SAMD7', 'gene.H2BU1',
+       'gene.KEL', 'gene.PEG3', 'gene.C1orf68', 'gene.HTN3', 'gene.LRRC30',
+       'gene.OR6B1', 'gene.RFPL4AL1', 'gene.KIAA1210', 'gene.AC023055.1',
+       'gene.AL139011.2', 'gene.FAM95C', 'gene.AC132217.2'],
+      dtype='object')Beginning cross validation on test
+Cross validation scores: [0.71195652 0.55279503 0.53508772 0.63636364 0.54347826 0.70652174
+ 0.39189189 0.69142857 0.75409836 0.56896552]
+Cross validation average: 0.6092587249674493
+

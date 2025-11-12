@@ -1,1 +1,1 @@
-{"alpha_min_ratio": 0.01, "l1_ratio": 0.3, "alphas": [0.09636065806844991]}
+{"l1_ratio": 0.3, "alpha_min_ratio": 0.01, "rcv_best_alpha": [0.04449831027895047], "filtered_best_alpha": [0.0981245918698573]}
