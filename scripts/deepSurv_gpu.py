@@ -16,9 +16,25 @@ from pycox.evaluation import EvalSurv
 from sklearn.preprocessing import StandardScaler
 from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split, KFold, ParameterGrid
+
 from networks import Net_3layers, Net_5layers
 
+NUM_FOLDS = 5
+SEED = 42
+VERBOSE = True
 
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.use_deterministic_algorithms(True)
+
+# Paths
 base = os.path.basename(os.getcwd())
 list = os.getcwd().split(os.sep)
 list.pop(list.index(base))
@@ -32,20 +48,13 @@ AVAILABLE_DATASETS = {
     "mRNA_tpm_log": os.path.join("mRNA", "clinical_mRNA_normalized_tpm_log.csv")
 }
 
-NUM_FOLDS = 5
-SEED = 42
-VERBOSE = True
-
-random.seed(SEED)
-np.random.seed(SEED)
-_ = torch.manual_seed(SEED)
-os.environ['PYTHONHASHSEED'] = str(SEED)
-
 
 ##############
 # Save model #
 ##############
 def save_best_model(best_model, best_params, with_clinical, folder, file):
+    os.makedirs(f'../models/{folder}', exist_ok=True)
+
     if with_clinical:
         path = f'../models/{folder}/{file}_clinical.pkl'
     else:
