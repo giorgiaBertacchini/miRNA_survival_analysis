@@ -17,8 +17,6 @@ from sklearn.metrics import mean_absolute_error, r2_score, make_scorer
 from skorch import NeuralNetRegressor
 from skorch.callbacks import LRScheduler, EarlyStopping
 
-from sksurv.metrics import concordance_index_censored
-
 from networks import Net_3layers, Net_5layers
 
 NUM_FOLDS = 5
@@ -26,9 +24,16 @@ SEED = 42
 
 random.seed(SEED)
 np.random.seed(SEED)
-_ = torch.manual_seed(SEED)
+torch.manual_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
 
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.use_deterministic_algorithms(True)
+
+# Paths
 base = os.path.basename(os.getcwd())
 path_parts = os.getcwd().split(os.sep)
 path_parts.pop(path_parts.index(base))
@@ -110,7 +115,7 @@ def save_model(model, with_clinical, folder, best_params, best_score, file):
         np.savez(f'../models/{folder}/{file}_no_clinical.npz', **params_dict)
 
     # Write txt with best parameters
-    txt_path = f'../models/mlp_path.txt'
+    txt_path = f'../models/mlp_results.txt'
     with open(txt_path, 'a') as f:
         f.write(f"Model path: {path}\n")
         f.write(f"Best parameters:\n")
@@ -243,13 +248,6 @@ def network(mlp_class, device, X_mlp):
 
 
 def grid_search(mlp_class, X_mlp, y_mlp, device, kfold):
-    """def c_index_scorer(y_true, y_pred):
-        events = y_true > 0
-        times = np.abs(y_true)
-        return concordance_index_censored(events, times, y_pred)[0]
-
-    cindex = make_scorer(c_index_scorer, greater_is_better=True)"""
-
     net, params = network(mlp_class, device, X_mlp)
 
     rs = GridSearchCV(
@@ -257,7 +255,7 @@ def grid_search(mlp_class, X_mlp, y_mlp, device, kfold):
         param_grid=params,
         refit=True,
         cv=kfold,
-        #scoring=cindex,  # If MSE Loss, comment this
+        scoring='neg_mean_squared_error',
         verbose=1,
         n_jobs=1
     )
@@ -291,5 +289,10 @@ def main(data_type):
 
 
 if __name__ == "__main__":
+    # Clear previous results file
+    txt_path = '../models/mlp_results.txt'
+    with open(txt_path, 'w') as f:
+        f.write("")
+
     for data in ["miRNA_log", "miRNA_quant", "mRNA_log", "mRNA_tpm_log"]:
         main(data)
