@@ -42,8 +42,8 @@ ROOT = '\\'.join(list)
 DATA_PATH = os.path.join(ROOT, 'datasets\\preprocessed')
 
 AVAILABLE_DATASETS = {
-    "miRNA_log": "clinical_miRNA_normalized_log.csv",
-    "miRNA_quant": "clinical_miRNA_normalized_quant.csv",
+    "miRNA_log": os.path.join("miRNA", "clinical_miRNA_normalized_log.csv"),
+    "miRNA_quant": os.path.join("miRNA", "clinical_miRNA_normalized_quant.csv"),
     "mRNA_log": os.path.join("mRNA", "clinical_mRNA_normalized_log.csv"),
     "mRNA_tpm_log": os.path.join("mRNA", "clinical_mRNA_normalized_tpm_log.csv")
 }
@@ -93,6 +93,8 @@ def prepare_data(path, with_clinical, device):
                          not col.startswith('hsa') and col not in ['duration', 'event']]
         dataframe.drop(columns=clinical_cols, inplace=True)
 
+    y = dataset[['duration', 'event']].copy()
+
     #############
     # Z-scaling #
     #############
@@ -101,10 +103,8 @@ def prepare_data(path, with_clinical, device):
 
     standardize = [([col], StandardScaler()) for col in cols_standardize]
     leave = [(col, None) for col in cols_leave]
+
     x_mapper = DataFrameMapper(standardize + leave)
-
-    y = (dataframe['duration'].values, dataframe['event'].values)
-
     scaled_X = x_mapper.fit_transform(dataframe).astype('float32')
     scaled_X = pd.DataFrame(scaled_X, columns=[col for col in dataframe.columns if col not in ['duration', 'event']])
 
@@ -116,14 +116,29 @@ def prepare_data(path, with_clinical, device):
     ###############
     # Data on GPU #
     ###############
-    X_train = torch.tensor(X_train.values, dtype=torch.float32).to(device)
-    X_test = torch.tensor(X_test.values, dtype=torch.float32).to(device)
-    y_train = (torch.tensor(y_train[0], dtype=torch.float32).to(device),
-               torch.tensor(y_train[1], dtype=torch.float32).to(device))
-    y_test = (torch.tensor(y_test[0], dtype=torch.float32).to(device),
-              torch.tensor(y_test[1], dtype=torch.float32).to(device))
+    X_train_torch = torch.tensor(X_train, dtype=torch.float32, device=device)
+    X_test_torch = torch.tensor(X_test, dtype=torch.float32, device=device)
+    y_train_tuple = (
+        torch.tensor(y_train['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=device),
+        torch.tensor(y_train['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=device)
+    )
+    y_test_tuple = (
+        torch.tensor(y_test['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=device),
+        torch.tensor(y_test['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=device)
+    )
 
     return X_train, y_train, X_test, y_test
+
+def create_model(in_features, params, network_class):
+    if network_class == Net_3layers:
+        net = Net_3layers(in_features, params['hidden1'], params['hidden2'], params['dropout'])
+    else:
+        net = Net_5layers(in_features, params['hidden1'], params['hidden2'], params['hidden3'],
+                          params['hidden4'], params['dropout'])
+    model = CoxPH(net, tt.optim.Adam)
+    model.optimizer.set_lr(params['lr'])
+    model.optimizer.set_weight_decay(params['weight_decay'])
+    return model
 
 
 def surv(X, y, kfold, network_class):
@@ -158,27 +173,43 @@ def surv(X, y, kfold, network_class):
     for params in ParameterGrid(param_grid):
         scores = []
         for train_idx, val_idx in kfold.split(X):
-            X_train, X_val = X[train_idx], X[val_idx]
-            y_train = (y[0][train_idx], y[1][train_idx])
-            y_val = (y[0][val_idx], y[1][val_idx])
+            ####################
+            # Cross-Validation #
+            ####################
+            durations_train = y[0][train_idx]
+            events_train = y[1][train_idx]
+            y_train_fold = (durations_train, events_train)
 
-            if network_class == Net_3layers:
-                net = Net_3layers(in_features, params['hidden1'], params['hidden2'], params['dropout'])
-            else:
-                net = Net_5layers(in_features, params['hidden1'], params['hidden2'], params['hidden3'],
-                                  params['hidden4'], params['dropout'])
+            durations_val = y[0][val_idx]
+            events_val = y[1][val_idx]
+            y_val_fold = (durations_val, events_val)
 
-            model = CoxPH(net, tt.optim.Adam)
-            model.optimizer.set_lr(params['lr'])
-            model.optimizer.set_weight_decay(params['weight_decay'])
-            scheduler = StepLR(model.optimizer, step_size=10, gamma=params['lr_factor'])
-            callbacks = [tt.callbacks.EarlyStopping(patience=20), tt.callbacks.LRScheduler(scheduler)]
+            X_train_fold = X[train_idx]
+            X_val_fold = X[val_idx]
 
-            _ = model.fit(X_train, y_train, batch_size=params['batch_size'], epochs=params['epochs'],
-                          callbacks=callbacks, verbose=False, val_data=(X_val, y_val))
+            val = (X_val_fold, y_val_fold)
 
-            surv_df = model.predict_surv_df(X_val)
-            ev = EvalSurv(surv_df, y_val[0].cpu().numpy(), y_val[1].cpu().numpy(), censor_surv='km')
+            ##################
+            # Model Training #
+            ##################
+            model = create_model(in_features, params, network_class)
+
+            callbacks = [tt.callbacks.EarlyStopping(patience=25)]
+
+            _ = model.fit(
+                X_train_fold,
+                y_train_fold,
+                batch_size=params['batch_size'], epochs=params['epochs'],
+                callbacks=callbacks,
+                verbose=False,
+                val_data=(X_val_fold, y_val_fold)
+            )
+
+            ###############
+            # Evaltuation #
+            ###############
+            surv_df = model.predict_surv_df(X_val_fold)
+            ev = EvalSurv(surv_df, y_val_fold[0].cpu().numpy(), y_val_fold[1].cpu().numpy(), censor_surv='km')
             scores.append(ev.concordance_td())
 
         results.append({'params': params, 'mean_concordance': np.mean(scores)})

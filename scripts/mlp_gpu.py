@@ -41,8 +41,8 @@ ROOT = os.path.dirname(os.getcwd())
 DATA_PATH = os.path.join(ROOT, 'datasets', 'preprocessed')
 
 AVAILABLE_DATASETS = {
-    "miRNA_log": "clinical_miRNA_normalized_log.csv",
-    "miRNA_quant": "clinical_miRNA_normalized_quant.csv",
+    "miRNA_log": os.path.join("miRNA", "clinical_miRNA_normalized_log.csv"),
+    "miRNA_quant": os.path.join("miRNA", "clinical_miRNA_normalized_quant.csv"),
     "mRNA_log": os.path.join("mRNA", "clinical_mRNA_normalized_log.csv"),
     "mRNA_tpm_log": os.path.join("mRNA", "clinical_mRNA_normalized_tpm_log.csv")
 }
