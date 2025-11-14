@@ -49,51 +49,6 @@ AVAILABLE_DATASETS = {
 }
 
 
-####################
-# Plot and results #
-####################
-def plot_real_vs_predicted(trues, preds, text):
-    trues_flat = trues.flatten()
-    preds_flat = preds.flatten()
-    errors = preds_flat - trues_flat
-
-    plt.figure(figsize=(7, 7))
-    plt.scatter(trues_flat, preds_flat, c=np.abs(errors), cmap='viridis', alpha=0.7)
-    plt.plot([trues.min(), trues.max()],
-             [trues.min(), trues.max()],
-             'r--', label='Perfect prediction')
-    plt.colorbar(label="Absolute Error")
-    plt.xlabel("Real Days to Death")
-    plt.ylabel("Predicted Days to Death")
-    plt.title(f"Predicted vs True Days to Death (colored by error) - {text}")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
-def plot_losses_grid(model, text):
-    plt.figure(figsize=(10, 6))
-    plt.plot(model.history[:, 'train_loss'], label='Train Loss')
-    plt.plot(model.history[:, 'valid_loss'], label='Validation Loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title(f'Training and Validation Loss Curves - {text}')
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-
-def print_results(preds, y_test_mlp):
-    print("Metrics for log results:")
-
-    mae = mean_absolute_error(y_test_mlp, preds)
-    r2 = r2_score(y_test_mlp, preds)
-    print(f"MAE: {mae:.2f}")
-    print(f"R²: {r2:.2f}")
-
-    print("Preds mean/std:", np.mean(preds), np.std(preds))
-
-
 ##############
 # Save model #
 ##############
@@ -110,12 +65,19 @@ def save_model(model, with_clinical, folder, best_params, best_score, file):
     params_dict = {}
     for name, param in net.named_parameters():
         params_dict[name] = param.detach().cpu().numpy()
+
     if with_clinical:
         path = os.path.join(ROOT, f'models/{folder}/{file}_clinical.npz')
         np.savez(path, **params_dict)
+        loss_path = os.path.join(ROOT, f'models/{folder}/{file}_clinical_losses.npz')
     else:
         path = os.path.join(ROOT, f'models/{folder}/{file}_no_clinical.npz')
         np.savez(path, **params_dict)
+        loss_path = os.path.join(ROOT, f'models/{folder}/{file}_no_clinical_losses.npz')
+
+    train_losses = model.history[:, 'train_loss']
+    valid_losses = model.history[:, 'valid_loss']
+    np.savez(loss_path, train_losses=train_losses, valid_losses=valid_losses)
 
     # Write txt with best parameters
     txt_path = os.path.join(ROOT, f'models/mlp_results.txt')
