@@ -31,20 +31,21 @@ torch.cuda.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-torch.use_deterministic_algorithms(True)
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+# torch.use_deterministic_algorithms(True)
 
 # Paths
 base = os.path.basename(os.getcwd())
 path_parts = os.getcwd().split(os.sep)
 path_parts.pop(path_parts.index(base))
-ROOT = os.path.dirname(os.getcwd())
+ROOT = os.path.dirname(os.getcwd()) + "/mbulgarelli"
 DATA_PATH = os.path.join(ROOT, 'datasets', 'preprocessed')
 
 AVAILABLE_DATASETS = {
-    "miRNA_log": os.path.join("miRNA", "clinical_miRNA_normalized_log.csv"),
-    "miRNA_quant": os.path.join("miRNA", "clinical_miRNA_normalized_quant.csv"),
-    "mRNA_log": os.path.join("mRNA", "clinical_mRNA_normalized_log.csv"),
-    "mRNA_tpm_log": os.path.join("mRNA", "clinical_mRNA_normalized_tpm_log.csv")
+    "miRNA_log": os.path.join(DATA_PATH, "miRNA", "clinical_miRNA_normalized_log.csv"),
+    "miRNA_quant": os.path.join(DATA_PATH, "miRNA", "clinical_miRNA_normalized_quant.csv"),
+    "mRNA_log": os.path.join(DATA_PATH, "mRNA", "clinical_mRNA_normalized_log.csv"),
+    "mRNA_tpm_log": os.path.join(DATA_PATH, "mRNA", "clinical_mRNA_normalized_tpm_log.csv")
 }
 
 
@@ -97,25 +98,27 @@ def print_results(preds, y_test_mlp):
 # Save model #
 ##############
 def save_model(model, with_clinical, folder, best_params, best_score, file):
-    os.makedirs(f'../models/{folder}', exist_ok=True)
+    os.makedirs(os.path.join(ROOT, f'models/{folder}'), exist_ok=True)
 
-    if with_clinical:
-        path = f'../models/{folder}/{file}_clinical.pkl'
-    else:
-        path = f'../models/{folder}/{file}_no_clinical.pkl'
-    joblib.dump(model, path)
+    # if with_clinical:
+    #     path = f'../models/{folder}/{file}_clinical.pkl'
+    # else:
+    #     path = f'../models/{folder}/{file}_no_clinical.pkl'
+    # joblib.dump(model, path)
 
     net = model.module_
     params_dict = {}
     for name, param in net.named_parameters():
         params_dict[name] = param.detach().cpu().numpy()
     if with_clinical:
-        np.savez(f'../models/{folder}/{file}_clinical.npz', **params_dict)
+        path = os.path.join(ROOT, f'models/{folder}/{file}_clinical.npz')
+        np.savez(path, **params_dict)
     else:
-        np.savez(f'../models/{folder}/{file}_no_clinical.npz', **params_dict)
+        path = os.path.join(ROOT, f'models/{folder}/{file}_no_clinical.npz')
+        np.savez(path, **params_dict)
 
     # Write txt with best parameters
-    txt_path = f'../models/mlp_results.txt'
+    txt_path = os.path.join(ROOT, f'models/mlp_results.txt')
     with open(txt_path, 'a') as f:
         f.write(f"Model path: {path}\n")
         f.write(f"Best parameters:\n")
@@ -136,7 +139,7 @@ def prepare_data(dataset_path, with_clinical):
 
     if not with_clinical:
         # remove clinical data columns
-        X_cols = [col for col in X_cols if col.startswith('hsa')]
+        X_cols = [col for col in X_cols if col.startswith('hsa') or col.startswith('gene.')]
     X = dataset[X_cols]
 
     custom_dtype = np.dtype([
@@ -290,9 +293,10 @@ def main(data_type):
 
 if __name__ == "__main__":
     # Clear previous results file
-    txt_path = '../models/mlp_results.txt'
-    with open(txt_path, 'w') as f:
+    txt_path = 'models/mlp_results.txt'
+    os.makedirs(os.path.join(ROOT, f'models'), exist_ok=True)
+    with open(os.path.join(ROOT, txt_path), 'w') as f:
         f.write("")
 
-    for data in ["miRNA_log", "miRNA_quant", "mRNA_log", "mRNA_tpm_log"]:
+    for data in ["miRNA_log"]:#, "miRNA_quant", "mRNA_log", "mRNA_tpm_log"]:
         main(data)
