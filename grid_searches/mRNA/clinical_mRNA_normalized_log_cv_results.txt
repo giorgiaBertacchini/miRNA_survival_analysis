@@ -3,14 +3,48 @@ Finished training cen_best:
                        l1_ratio=0.3)
 Test c-index: 0.6129476584022039
 Kept 197 variables for infer:
-Index(['age_at_initial_pathologic_diagnosis', 'gene.TFPI', 'gene.MYH13',
-       'gene.MATK', 'gene.OTC', 'gene.CYP46A1', 'gene.CASR', 'gene.GUCA2B',
-       'gene.ITIH1', 'gene.SNAP91',
-       ...
-       'gene.ZIM2', 'gene.DGKK', 'gene.TMEM272', 'gene.TEX13D', 'gene.CCDC201',
-       'gene.FAM95C', 'gene.PERCC1', 'gene.EEF1AKMT4', 'gene.AC132217.2',
-       'gene.AC090517.4'],
-      dtype='object', length=197)Beginning cross validation on test
+['age_at_initial_pathologic_diagnosis' 'gene.TFPI' 'gene.MYH13'
+ 'gene.MATK' 'gene.OTC' 'gene.CYP46A1' 'gene.CASR' 'gene.GUCA2B'
+ 'gene.ITIH1' 'gene.SNAP91' 'gene.TXK' 'gene.WNT8B' 'gene.PKD2L2'
+ 'gene.SI' 'gene.SLC17A6' 'gene.BAMBI' 'gene.DDT' 'gene.TOP3B' 'gene.COCH'
+ 'gene.PXMP4' 'gene.PCSK1N' 'gene.PHEX' 'gene.KLF8' 'gene.HYAL4'
+ 'gene.RLN1' 'gene.ELAVL2' 'gene.ALDH3A1' 'gene.CPT1A' 'gene.OR12D3'
+ 'gene.MEP1A' 'gene.REG1A' 'gene.IL1R1' 'gene.LEPR' 'gene.TNP1'
+ 'gene.TAS2R8' 'gene.NPY' 'gene.DBH' 'gene.MAGEA9' 'gene.C4BPA'
+ 'gene.KIF25' 'gene.AMOT' 'gene.HSPA2' 'gene.RAC2' 'gene.HOXD1'
+ 'gene.ZSCAN10' 'gene.MRO' 'gene.GRHL1' 'gene.ERN2' 'gene.ADAMTS8'
+ 'gene.MSI1' 'gene.SCRN1' 'gene.IGFBPL1' 'gene.MMP7' 'gene.TMPRSS13'
+ 'gene.TRPC3' 'gene.RDH16' 'gene.KRT71' 'gene.FAM181A' 'gene.SLC25A47'
+ 'gene.LMAN1L' 'gene.MYLK3' 'gene.SLC6A3' 'gene.PTH2' 'gene.TMEM61'
+ 'gene.FNDC7' 'gene.F13B' 'gene.GADL1' 'gene.IGSF11' 'gene.SNCA'
+ 'gene.GTF2H2' 'gene.IL9' 'gene.PRSS35' 'gene.SLC16A2' 'gene.IGSF1'
+ 'gene.PROSER2' 'gene.CAMK4' 'gene.GPR78' 'gene.ZIC3' 'gene.HTR5A'
+ 'gene.RHBDL2' 'gene.TFF2' 'gene.DAPL1' 'gene.ICA1L' 'gene.PITX2'
+ 'gene.TMEM155' 'gene.NPY1R' 'gene.TMEM174' 'gene.FABP7' 'gene.CDCA7L'
+ 'gene.METTL27' 'gene.PPP1R14D' 'gene.CYP2S1' 'gene.CASKIN1' 'gene.GNG4'
+ 'gene.ADAM29' 'gene.UGT3A2' 'gene.VCX3A' 'gene.BOLA2B' 'gene.HOXD12'
+ 'gene.CST1' 'gene.CEL' 'gene.OR4D5' 'gene.FAM90A1' 'gene.SCG2'
+ 'gene.ISG20' 'gene.B3GALT1' 'gene.OR5T3' 'gene.SNTG2' 'gene.ARPP21'
+ 'gene.GALNTL6' 'gene.KLK15' 'gene.OR10P1' 'gene.LONRF3' 'gene.TSPEAR'
+ 'gene.FOXR1' 'gene.TSPYL6' 'gene.H1-8' 'gene.ZFP42' 'gene.C12orf40'
+ 'gene.LYNX1' 'gene.ALX1' 'gene.DEFB119' 'gene.GSX2' 'gene.H2AW'
+ 'gene.OR5T2' 'gene.OR52A1' 'gene.FAM181B' 'gene.SHISAL2A' 'gene.FREM3'
+ 'gene.MACC1' 'gene.AIFM3' 'gene.ZNF730' 'gene.DHRS7C' 'gene.NRG3'
+ 'gene.PRR30' 'gene.KRT26' 'gene.QRFPR' 'gene.TNFRSF18' 'gene.SAMD7'
+ 'gene.FAM9C' 'gene.C17orf99' 'gene.OR7D2' 'gene.OTOG' 'gene.NUTM2B'
+ 'gene.CCDC9B' 'gene.BNIP5' 'gene.STK31' 'gene.ADH7' 'gene.SLC6A9'
+ 'gene.H2BU1' 'gene.FAM163B' 'gene.DMBX1' 'gene.KEL' 'gene.PEG3'
+ 'gene.OXCT2' 'gene.C1orf68' 'gene.L1CAM' 'gene.FOXB2' 'gene.HLA-G'
+ 'gene.SPDYC' 'gene.FRG2' 'gene.HTN3' 'gene.ARSH' 'gene.LRRC30'
+ 'gene.TSGA13' 'gene.EVPLL' 'gene.FAM166B' 'gene.SKOR2' 'gene.OR6B1'
+ 'gene.ETDB' 'gene.AC138647.1' 'gene.RFPL4AL1' 'gene.OR5H6' 'gene.USP17L1'
+ 'gene.APOC2' 'gene.RAMACL' 'gene.TCP10L' 'gene.SPRR2F' 'gene.EPPIN-WFDC6'
+ 'gene.KIAA1210' 'gene.OR8G5' 'gene.KLRC4-KLRK1' 'gene.MTRNR2L10'
+ 'gene.AC023055.1' 'gene.TEX49' 'gene.AL139011.2' 'gene.SPANXN2'
+ 'gene.ZIM2' 'gene.DGKK' 'gene.TMEM272' 'gene.TEX13D' 'gene.CCDC201'
+ 'gene.FAM95C' 'gene.PERCC1' 'gene.EEF1AKMT4' 'gene.AC132217.2'
+ 'gene.AC090517.4']
+Beginning cross validation on test
 Cross validation scores: [0.69565217 0.61490683 0.57017544 0.45887446 0.76086957 0.59782609
  0.43918919 0.8        0.75409836 0.4137931 ]
 Cross validation average: 0.6105385209149246
@@ -20,18 +54,17 @@ Finished training cen_best:
                        l1_ratio=0.3)
 Test c-index: 0.6336088154269972
 Kept 50 variables for infer:
-Index(['gene.MYH13', 'gene.MATK', 'gene.SNAP91', 'gene.CPT1A', 'gene.TNP1',
-       'gene.NPY', 'gene.NFE2', 'gene.RAC2', 'gene.CCNA1', 'gene.MRO',
-       'gene.GRHL1', 'gene.ADAMTS8', 'gene.SLC25A47', 'gene.GTF2H2',
-       'gene.SLC16A2', 'gene.ZIC3', 'gene.SUSD3', 'gene.ICA1L', 'gene.NPY1R',
-       'gene.ADAM9', 'gene.UGT3A2', 'gene.NSG1', 'gene.VCX3A', 'gene.PCSK9',
-       'gene.BOLA2B', 'gene.HOXD12', 'gene.ANKK1', 'gene.CEL', 'gene.SHCBP1',
-       'gene.ARPP21', 'gene.LONRF3', 'gene.ALX1', 'gene.DEFB119', 'gene.H2AW',
-       'gene.SHISAL2A', 'gene.TNFRSF18', 'gene.SAMD7', 'gene.H2BU1',
-       'gene.KEL', 'gene.PEG3', 'gene.C1orf68', 'gene.HTN3', 'gene.LRRC30',
-       'gene.OR6B1', 'gene.RFPL4AL1', 'gene.KIAA1210', 'gene.AC023055.1',
-       'gene.AL139011.2', 'gene.FAM95C', 'gene.AC132217.2'],
-      dtype='object')Beginning cross validation on test
+['gene.MYH13' 'gene.MATK' 'gene.SNAP91' 'gene.CPT1A' 'gene.TNP1'
+ 'gene.NPY' 'gene.NFE2' 'gene.RAC2' 'gene.CCNA1' 'gene.MRO' 'gene.GRHL1'
+ 'gene.ADAMTS8' 'gene.SLC25A47' 'gene.GTF2H2' 'gene.SLC16A2' 'gene.ZIC3'
+ 'gene.SUSD3' 'gene.ICA1L' 'gene.NPY1R' 'gene.ADAM9' 'gene.UGT3A2'
+ 'gene.NSG1' 'gene.VCX3A' 'gene.PCSK9' 'gene.BOLA2B' 'gene.HOXD12'
+ 'gene.ANKK1' 'gene.CEL' 'gene.SHCBP1' 'gene.ARPP21' 'gene.LONRF3'
+ 'gene.ALX1' 'gene.DEFB119' 'gene.H2AW' 'gene.SHISAL2A' 'gene.TNFRSF18'
+ 'gene.SAMD7' 'gene.H2BU1' 'gene.KEL' 'gene.PEG3' 'gene.C1orf68'
+ 'gene.HTN3' 'gene.LRRC30' 'gene.OR6B1' 'gene.RFPL4AL1' 'gene.KIAA1210'
+ 'gene.AC023055.1' 'gene.AL139011.2' 'gene.FAM95C' 'gene.AC132217.2']
+Beginning cross validation on test
 Cross validation scores: [0.71195652 0.55279503 0.53508772 0.63636364 0.54347826 0.70652174
  0.39189189 0.69142857 0.75409836 0.56896552]
 Cross validation average: 0.6092587249674493
