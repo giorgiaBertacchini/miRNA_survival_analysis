@@ -1,11 +1,2 @@
-come prendere i dati di mRNA/come si chiamano su gdc?
-
-chiedere se normalizzazione su read_count+log2+quantile è corretto? dovevamo usare diretto reads_per_million?
-
-c'è qualche altra normalizzazione o correzione da fare su questo aspetto? soprattutto considerato che COX non va
-
-chiedere se applicare Cox come uno dei metodi per l'analisi di sopravvivenza sia corretto o sia superato,
-e se anche DeepSurv vada bene nel caso come secondo modello.
-
-visto che abbiamo pochi morti, ha senso prendere i morti e quelli con alto followup o ha più senso prendere 
-tutti i sample per allenare e fare analisi?
+mostrare i risultati dei grafici alla prof, specialmente quelli delle hazard function, e chiedere come interpretare i risultati ottenuti che sembrano bruttini
+    (VERDE per persone con valore positivo, BLU per persone con valore negativo, GIALLA è media dei positivi, NERA linea media dei negativi)
