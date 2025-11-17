@@ -1,0 +1,144 @@
+Model path: /homes/mbulgarelli/models/miRNA_log/mlp_3_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 128
+	module__hidden2: 32
+Best score: -1215187.7
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_log/mlp_3_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 64
+	module__hidden2: 64
+Best score: -1220156.7625
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_log/mlp_5_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 64
+	module__hidden2: 64
+	module__hidden3: 16
+	module__hidden4: 8
+Best score: -1233795.4875
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_log/mlp_3_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 128
+	module__hidden2: 32
+Best score: -1178569.1375
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_quant/mlp_3_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 64
+	module__hidden2: 32
+Best score: -1209819.1625
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_log/mlp_3_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.3
+	module__hidden1: 64
+	module__hidden2: 128
+Best score: -1181645.075
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_quant/mlp_3_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.3
+	module__hidden1: 64
+	module__hidden2: 32
+Best score: -1222883.5375
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_log/mlp_5_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 256
+	module__hidden2: 64
+	module__hidden3: 32
+	module__hidden4: 32
+Best score: -1186384.4625
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_log/mlp_5_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 128
+	module__hidden2: 128
+	module__hidden3: 32
+	module__hidden4: 8
+Best score: -1247179.95
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_quant/mlp_5_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.3
+	module__hidden1: 128
+	module__hidden2: 128
+	module__hidden3: 32
+	module__hidden4: 16
+Best score: -1231534.4375
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_tpm_log/mlp_3_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 64
+	module__hidden2: 32
+Best score: -1179059.2125
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_tpm_log/mlp_3_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 256
+	module__hidden2: 64
+Best score: -1179269.7625
+=====================================
+Model path: /homes/mbulgarelli/models/miRNA_quant/mlp_5_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 128
+	module__hidden2: 32
+	module__hidden3: 16
+	module__hidden4: 32
+Best score: -1222072.225
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_tpm_log/mlp_5_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 256
+	module__hidden2: 128
+	module__hidden3: 32
+	module__hidden4: 8
+Best score: -1188372.7375
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_log/mlp_5_no_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.3
+	module__hidden1: 256
+	module__hidden2: 32
+	module__hidden3: 32
+	module__hidden4: 8
+Best score: -1190197.575
+=====================================
+Model path: /homes/mbulgarelli/models/mRNA_tpm_log/mlp_5_clinical.npz
+Best parameters:
+	lr: 0.01
+	module__dropout: 0.5
+	module__hidden1: 256
+	module__hidden2: 128
+	module__hidden3: 16
+	module__hidden4: 32
+Best score: -1190049.55
+=====================================

@@ -12,7 +12,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.preprocessing import StandardScaler
 from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split, KFold, GridSearchCV
-from sklearn.metrics import mean_absolute_error, r2_score, make_scorer
 
 from skorch import NeuralNetRegressor
 from skorch.callbacks import LRScheduler, EarlyStopping
@@ -32,7 +31,6 @@ torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-# torch.use_deterministic_algorithms(True)
 
 # Paths
 base = os.path.basename(os.getcwd())
@@ -110,7 +108,7 @@ def prepare_data(dataset_path, with_clinical):
     ])
 
     y = []
-    for index,row in dataset[y_cols].iterrows():
+    for index, row in dataset[y_cols].iterrows():
         if row['Death'] == 1:
             y.append(np.array((True, row['days_to_death'].item()), dtype=custom_dtype))
         elif row['Death'] == 0:
@@ -158,13 +156,17 @@ def network(mlp_class, device, X_mlp):
         module__input_dim=X_mlp.shape[1],
         module__output_dim=1,
         max_epochs=500,
-        lr=1e-2,
+        lr=1e-3,
         batch_size=32,
         optimizer=torch.optim.AdamW,
         optimizer__weight_decay=1e-6,
         criterion=nn.MSELoss(),
         device=device,
         iterator_train__drop_last=True,  # To ensure consistent batch sizes
+        iterator_train__num_workers=4,
+        iterator_valid__num_workers=4,
+        iterator_train__pin_memory=True,
+        iterator_valid__pin_memory=True,
         callbacks=[
             ('lr_scheduler', LRScheduler(
                 policy=ReduceLROnPlateau,
@@ -176,7 +178,7 @@ def network(mlp_class, device, X_mlp):
             )),
             ('early_stopping', EarlyStopping(
                 monitor='valid_loss',
-                patience=25,
+                patience=10,
                 threshold=1e-3,
                 threshold_mode='rel',
                 load_best=True
@@ -189,24 +191,24 @@ def network(mlp_class, device, X_mlp):
             'module__hidden1': [64, 128, 256],
             'module__hidden2': [32, 64, 128],
             'module__dropout': [0.3, 0.5],
-            'optimizer__weight_decay': [1e-6, 1e-5, 1e-4],
-            'callbacks__lr_scheduler__factor': [0.7, 0.5],
+            # 'optimizer__weight_decay': [1e-6, 1e-4],
+            # 'callbacks__lr_scheduler__factor': [0.7, 0.5],
             'lr': [1e-2, 1e-3],
-            'max_epochs': [250, 500],
-            'batch_size': [16, 32, 64],
+            # 'max_epochs': [250, 500],
+            # 'batch_size': [32, 64],
         }
     else:
         params = {
-            'module__hidden1': [128, 256],
-            'module__hidden2': [64, 128],
-            'module__hidden3': [32, 64],
-            'module__hidden4': [16, 32],
+            'module__hidden1': [64, 128, 256],
+            'module__hidden2': [32, 64, 128],
+            'module__hidden3': [16, 32, 64],
+            'module__hidden4': [8, 16, 32],
             'module__dropout': [0.3, 0.5],
-            'max_epochs': [250, 500],
-            'optimizer__weight_decay': [1e-6, 1e-5, 1e-4],
-            'callbacks__lr_scheduler__factor': [0.7, 0.5],
+            # 'max_epochs': [250, 500],
+            # 'optimizer__weight_decay': [1e-6, 1e-4],
+            # 'callbacks__lr_scheduler__factor': [0.7, 0.5],
             'lr': [1e-2, 1e-3],
-            'batch_size': [16, 32, 64],
+            # 'batch_size': [32, 64],
         }
 
     return net, params
@@ -235,11 +237,11 @@ def grid_search(mlp_class, X_mlp, y_mlp, device, kfold):
 def flow(data_type, with_clinical, device, kfold):
     dataset_path = os.path.join(DATA_PATH, AVAILABLE_DATASETS[data_type])
     X_mlp, y_mlp, X_test_mlp, y_test_mlp = prepare_data(dataset_path, with_clinical)
-
+    """
     print(f"[Net_3layers] Starting processing {data_type} ({'with' if with_clinical else 'without'} clinical data)")
     best_model, best_params, best_score = grid_search(Net_3layers, X_mlp, y_mlp, device, kfold)
-    save_model(best_model, with_clinical, data_type, best_params, best_score, file="mlp_3")
-
+    save_model(best_model, with_clinical, data_type, best_params, best_score, file="mlp_3")    
+    """
     print(f"[Net_5layers] Starting processing {data_type} ({'with' if with_clinical else 'without'} clinical data)")
     best_model, best_params, best_score = grid_search(Net_5layers, X_mlp, y_mlp, device, kfold)
     save_model(best_model, with_clinical, data_type, best_params, best_score, file="mlp_5")
@@ -249,16 +251,16 @@ def main(data_type):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     kfold = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
 
-    for with_clinical_data in [True, False]:
+    for with_clinical_data in [True]:  # , False]:
         flow(data_type, with_clinical_data, device, kfold)
 
 
 if __name__ == "__main__":
-    # Clear previous results file
-    txt_path = 'models/mlp_results.txt'
     os.makedirs(os.path.join(ROOT, f'models'), exist_ok=True)
-    with open(os.path.join(ROOT, txt_path), 'w') as f:
-        f.write("")
+    # Clear previous results file
+    # txt_path = 'models/mlp_results.txt'
+    # with open(os.path.join(ROOT, txt_path), 'w') as f:
+    #    f.write("")
 
-    for data in ["miRNA_log"]:#, "miRNA_quant", "mRNA_log", "mRNA_tpm_log"]:
+    for data in ["mRNA_tpm_log"]:  # ,"miRNA_log", "miRNA_quant", "mRNA_log", "mRNA_tpm_log"]:
         main(data)
