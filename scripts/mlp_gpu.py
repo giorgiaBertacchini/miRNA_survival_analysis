@@ -163,10 +163,6 @@ def network(mlp_class, device, X_mlp):
         criterion=nn.MSELoss(),
         device=device,
         iterator_train__drop_last=True,  # To ensure consistent batch sizes
-        iterator_train__num_workers=4,
-        iterator_valid__num_workers=4,
-        iterator_train__pin_memory=True,
-        iterator_valid__pin_memory=True,
         callbacks=[
             ('lr_scheduler', LRScheduler(
                 policy=ReduceLROnPlateau,
@@ -178,7 +174,7 @@ def network(mlp_class, device, X_mlp):
             )),
             ('early_stopping', EarlyStopping(
                 monitor='valid_loss',
-                patience=10,
+                patience=15,
                 threshold=1e-3,
                 threshold_mode='rel',
                 load_best=True
