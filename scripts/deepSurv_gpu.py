@@ -3,7 +3,7 @@ import os
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-import joblib
+from  math import comb
 
 import torch
 import torch.nn as nn
@@ -15,9 +15,11 @@ from pycox.evaluation import EvalSurv
 
 from sklearn.preprocessing import StandardScaler
 from sklearn_pandas import DataFrameMapper
-from sklearn.model_selection import train_test_split, KFold, ParameterGrid
+from sklearn.model_selection import train_test_split, StratifiedKFold, ParameterGrid
 
 from networks import Net_3layers, Net_5layers
+
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 NUM_FOLDS = 5
 SEED = 42
@@ -32,12 +34,12 @@ torch.cuda.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-torch.use_deterministic_algorithms(True)
+torch.use_deterministic_algorithms(False)
 
 # Paths
 base = os.path.basename(os.getcwd())
 list = os.getcwd().split(os.sep)
-list.pop(list.index(base))
+# list.pop(list.index(base))
 ROOT = '\\'.join(list)
 DATA_PATH = os.path.join(ROOT, 'datasets\\preprocessed')
 
@@ -52,37 +54,21 @@ AVAILABLE_DATASETS = {
 ##############
 # Save model #
 ##############
-def save_best_model(best_model, best_params, with_clinical, folder, file):
-    os.makedirs(f'../models/{folder}', exist_ok=True)
-
+def save_best_model(best_model, with_clinical, dataset, net_name):
     if with_clinical:
-        path = f'../models/{folder}/{file}_clinical.pkl'
+        filename = f'{dataset}__{net_name}__clinical.pth'
+        path = os.path.join(ROOT, f'models/mlp/{filename}')
     else:
-        path = f'../models/{folder}/{file}_no_clinical.pkl'
-    joblib.dump(best_model, path)
-
-    net = best_model.net
-    params_dict = {}
-    for name, param in net.named_parameters():
-        params_dict[name] = param.detach().cpu().numpy()
-    if with_clinical:
-        np.savez(f'../models/{folder}/{file}_clinical.npz', **params_dict)
-    else:
-        np.savez(f'../models/{folder}/{file}_no_clinical.npz', **params_dict)
-
-    # Write txt with best parameters
-    txt_path = f'../models/{folder}/deepSurv_clinical.txt'
-    with open(txt_path, 'w') as f:
-        f.write(f"Model on dataset: {folder}\n")
-        f.write(f"Best parameters:\n")
-        for key, value in best_params.items():
-            f.write(f"{key}: {value}\n")
+        filename = f'{dataset}__{net_name}__no_clinical.pth'
+        path = os.path.join(ROOT, f'models/mlp/{filename}')
+    
+    torch.save(best_model.state_dict(), path)
 
 
 ################
 # Prepare Data #
 ################
-def prepare_data(path, with_clinical, device):
+def prepare_data(path, with_clinical,kfold, device):
     dataframe = pd.read_csv(path)
     dataframe = dataframe.rename(columns={'Death': 'event', 'days_to_last_followup': 'duration'})
     dataframe.drop(columns=['days_to_death'], inplace=True)
@@ -90,10 +76,10 @@ def prepare_data(path, with_clinical, device):
     if not with_clinical:
         # remove clinical data columns
         clinical_cols = [col for col in dataframe.columns if
-                         not col.startswith('hsa') and col not in ['duration', 'event']]
+                         not col.startswith('hsa') and not col.startswith('gene.') and col not in ['duration', 'event']]
         dataframe.drop(columns=clinical_cols, inplace=True)
 
-    y = dataset[['duration', 'event']].copy()
+    y = dataframe[['duration', 'event']].copy()
 
     #############
     # Z-scaling #
@@ -111,13 +97,20 @@ def prepare_data(path, with_clinical, device):
     ##################
     # Data splitting #
     ##################
-    X_train, X_test, y_train, y_test = train_test_split(scaled_X, y, test_size=0.2, random_state=SEED)
+    X_train, X_test, y_train, y_test = train_test_split(scaled_X, y, test_size=0.2, random_state=SEED, stratify=y['event'])
+
+    #####################
+    # Stratified K-fold #
+    #####################
+    fold_indexes = []
+    for train_idx, val_idx in kfold.split(X_train, y_train['event']):
+        fold_indexes.append((train_idx, val_idx))
 
     ###############
     # Data on GPU #
     ###############
-    X_train_torch = torch.tensor(X_train, dtype=torch.float32, device=device)
-    X_test_torch = torch.tensor(X_test, dtype=torch.float32, device=device)
+    X_train_torch = torch.tensor(X_train.values, dtype=torch.float32, device=device)
+    X_test_torch = torch.tensor(X_test.values, dtype=torch.float32, device=device)
     y_train_tuple = (
         torch.tensor(y_train['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=device),
         torch.tensor(y_train['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=device)
@@ -127,33 +120,37 @@ def prepare_data(path, with_clinical, device):
         torch.tensor(y_test['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=device)
     )
 
-    return X_train, y_train, X_test, y_test
+    return X_train_torch, y_train_tuple, X_test_torch, y_test_tuple, fold_indexes
 
 def create_model(in_features, params, network_class):
     if network_class == Net_3layers:
-        net = Net_3layers(in_features, params['hidden1'], params['hidden2'], params['dropout'])
+        net = Net_3layers(in_features, 1, params['hidden1'], params['hidden2'], params['dropout'])
     else:
-        net = Net_5layers(in_features, params['hidden1'], params['hidden2'], params['hidden3'],
+        net = Net_5layers(in_features, 1, params['hidden1'], params['hidden2'], params['hidden3'],
                           params['hidden4'], params['dropout'])
     model = CoxPH(net, tt.optim.Adam)
     model.optimizer.set_lr(params['lr'])
-    model.optimizer.set_weight_decay(params['weight_decay'])
+    # model.optimizer.set_weight_decay(params['weight_decay'])
     return model
 
 
-def surv(X, y, kfold, network_class):
+def surv(X, y, fold_indexes, network_class, dataset_name):
     in_features = X.shape[1]
+
+    best_result = {
+        'best_score':-1,
+        'best_params':None,
+        'best_estimator':None,
+        'loss':None
+    }
 
     if network_class == Net_3layers:
         param_grid = {
-            'hidden1': [64, 128, 256],
-            'hidden2': [32, 64, 128],
-            'dropout': [0.3, 0.5],
-            'lr': [0.01, 0.001, 0.0001],
-            'batch_size': [32, 64, 128],
-            'epochs': [200, 500],
-            'weight_decay': [1e-6, 1e-5, 1e-4],
-            'lr_factor': [0.7, 0.5]
+            'hidden1': [32, 64, 128, 256],
+            'hidden2': [16, 32, 64, 128],
+            'dropout': [0.1, 0.3, 0.5, 0.7],
+            'lr': [1e-2, 1e-3],
+            'batch_size': [32, 64]
         }
     else:
         param_grid = {
@@ -170,9 +167,18 @@ def surv(X, y, kfold, network_class):
         }
 
     results = []
+    tot = 0
+    for v in param_grid.values():
+        tot += len(v)
+    combs = comb(tot, len(param_grid.keys()))
+    print(f"Testing {combs} possible parameters combinations")
+    i=1
+
     for params in ParameterGrid(param_grid):
         scores = []
-        for train_idx, val_idx in kfold.split(X):
+        print(f"Testing {i}/{combs}".center(100, '='))
+        i+=1
+        for train_idx, val_idx in fold_indexes:
             ####################
             # Cross-Validation #
             ####################
@@ -196,44 +202,63 @@ def surv(X, y, kfold, network_class):
 
             callbacks = [tt.callbacks.EarlyStopping(patience=25)]
 
-            _ = model.fit(
-                X_train_fold,
-                y_train_fold,
-                batch_size=params['batch_size'], epochs=params['epochs'],
-                callbacks=callbacks,
-                verbose=False,
-                val_data=(X_val_fold, y_val_fold)
-            )
+            if events_val.sum() != 0:
+                log = model.fit(
+                    X_train_fold,
+                    y_train_fold,
+                    batch_size=params['batch_size'], epochs=params['epochs'],
+                    callbacks=callbacks,
+                    verbose=False,
+                    val_data=(X_val_fold, y_val_fold)
+                )
 
-            ###############
-            # Evaltuation #
-            ###############
-            surv_df = model.predict_surv_df(X_val_fold)
-            ev = EvalSurv(surv_df, y_val_fold[0].cpu().numpy(), y_val_fold[1].cpu().numpy(), censor_surv='km')
-            scores.append(ev.concordance_td())
+                ###############
+                # Evaltuation #
+                ###############
+                _ = model.compute_baseline_hazards()
+                surv_df = model.predict_surv_df(X_val_fold)
+                ev = EvalSurv(surv_df, y_val_fold[0].cpu().numpy(), y_val_fold[1].cpu().numpy(), censor_surv='km')
+                scores.append(ev.concordance_td())
 
-        results.append({'params': params, 'mean_concordance': np.mean(scores)})
+        # results.append({'params': params, 'mean_concordance': np.mean(scores)})
+        if np.mean(scores) > best_result['best_score']:
+            best_result['score'] = np.mean(scores)
+            best_result['params'] = params
+            best_result['model'] = model
+            best_result['loss'] = log
+        
+        results.append({
+            'mean_concordance': np.mean(scores) if scores else None,
+            'std_concordance': np.std(scores) if scores else None,
+            'params': params,
+        })
+        results[-1] = results[-1] | {f"split{i}_test_score":scores[i] for i in range(len(scores))}
 
-    best = max(results, key=lambda x: x['mean_concordance'])
+    results = pd.DataFrame(results)
+    network_name = str(Net_3layers).split('.')[1].strip('\'>')
+    results.to_csv(os.path.join(ROOT, f'\\deepsurv_gcv_results\\{network_name}\\{dataset_name}.csv'), index=False)
+
     print("\n✅ Migliori parametri trovati:")
-    print(best)
-    return best
+    print(f"Miglior concordanza: {best_result['score']}")
+    print(f"Migliori parametri: {best_result['params']}")
+    print(f"Concordanza media: {results['mean_test_score'].mean()}")
+    return best_result
 
 
 def flow(data_type, with_clinical, device, kfold):
     dataset_path = os.path.join(DATA_PATH, AVAILABLE_DATASETS[data_type])
-    X_train, y_train, X_test, y_test = prepare_data(dataset_path, with_clinical, device)
+    X_train, y_train, X_test, y_test, fold_indexes = prepare_data(dataset_path, with_clinical, kfold, device)
 
-    best = surv(X_train, y_train, kfold, Net_3layers)
-    save_best_model(best['model'], best['params'], with_clinical, data_type, file="deepSurv_3")
+    best = surv(X_train, y_train, fold_indexes, Net_3layers, data_type)
+    save_best_model(best['model'], with_clinical, data_type, file="deepSurv_3")
 
-    best = surv(X_train, y_train, kfold, Net_5layers)
-    save_best_model(best['model'], best['params'], with_clinical, data_type, file="deepSurv_3")
+    best = surv(X_train, y_train, fold_indexes, Net_5layers, data_type)
+    save_best_model(best['model'], with_clinical, data_type, file="deepSurv_5")
 
 
 def main(data_type):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    kfold = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
+    kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
 
     for with_clinical_data in [True, False]:
         flow(data_type, with_clinical_data, device, kfold)

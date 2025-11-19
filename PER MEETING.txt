@@ -1,2 +1,4 @@
 mostrare i risultati dei grafici alla prof, specialmente quelli delle hazard function, e chiedere come interpretare i risultati ottenuti che sembrano bruttini
     (VERDE per persone con valore positivo, BLU per persone con valore negativo, GIALLA è media dei positivi, NERA linea media dei negativi)
+
+chiedere per permessi di esecuzione su server/accunt
