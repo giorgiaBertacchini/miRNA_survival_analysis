@@ -1,4 +1,0 @@
-cambiare iper parametri (numero neuroni, dropout, learning-rate)
-implementare scheduler
-provare a implementare rete più profonda sempre lineare, con più strati
-provare a implementare BERT
