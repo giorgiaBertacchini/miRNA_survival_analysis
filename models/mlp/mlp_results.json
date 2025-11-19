@@ -1,0 +1,178 @@
+{
+    "miRNA_log__mlp_3__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 64,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 128,
+            "module__hidden2": 32
+        },
+        "best_score": -1223276.0
+    },
+    "miRNA_log__mlp_3__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 64,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 64,
+            "module__hidden2": 32
+        },
+        "best_score": -1222371.0
+    },
+    "mRNA_log__mlp_3__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.5,
+            "module__hidden1": 128,
+            "module__hidden2": 16
+        },
+        "best_score": -1176642.8875
+    },
+    "miRNA_quant__mlp_3__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 32,
+            "module__hidden2": 32
+        },
+        "best_score": -1211471.8
+    },
+    "miRNA_quant__mlp_3__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.5,
+            "module__hidden1": 32,
+            "module__hidden2": 32
+        },
+        "best_score": -1213288.775
+    },
+    "mRNA_tpm_log__mlp_3__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 256,
+            "module__hidden2": 64
+        },
+        "best_score": -1171641.775
+    },
+    "mRNA_log__mlp_5__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 128,
+            "module__hidden2": 128,
+            "module__hidden3": 32,
+            "module__hidden4": 16
+        },
+        "best_score": -1185377.1875
+    },
+    "miRNA_log__mlp_5__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 128,
+            "module__hidden2": 64,
+            "module__hidden3": 64,
+            "module__hidden4": 32
+        },
+        "best_score": -1217573.9375
+    },
+    "miRNA_quant__mlp_5__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 64,
+            "module__hidden2": 128,
+            "module__hidden3": 16,
+            "module__hidden4": 32
+        },
+        "best_score": -1191031.45
+    },
+    "miRNA_log__mlp_5__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 128,
+            "module__hidden2": 32,
+            "module__hidden3": 64,
+            "module__hidden4": 32
+        },
+        "best_score": -1216109.1375
+    },
+    "mRNA_tpm_log__mlp_5__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.5,
+            "module__hidden1": 128,
+            "module__hidden2": 128,
+            "module__hidden3": 16,
+            "module__hidden4": 8
+        },
+        "best_score": -1176003.9
+    },
+    "mRNA_tpm_log__mlp_3__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 256,
+            "module__hidden2": 64
+        },
+        "best_score": -1172985.2875
+    },
+    "mRNA_log__mlp_3__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.5,
+            "module__hidden1": 256,
+            "module__hidden2": 64
+        },
+        "best_score": -1171707.7875
+    },
+    "mRNA_tpm_log__mlp_5__no_clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.3,
+            "module__hidden1": 128,
+            "module__hidden2": 128,
+            "module__hidden3": 16,
+            "module__hidden4": 8
+        },
+        "best_score": -1176760.225
+    },
+    "miRNA_quant__mlp_5__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 64,
+            "module__hidden2": 128,
+            "module__hidden3": 32,
+            "module__hidden4": 32
+        },
+        "best_score": -1196655.25
+    },
+    "mRNA_log__mlp_5__clinical.pth": {
+        "best_parameters": {
+            "batch_size": 32,
+            "lr": 0.01,
+            "module__dropout": 0.7,
+            "module__hidden1": 256,
+            "module__hidden2": 128,
+            "module__hidden3": 16,
+            "module__hidden4": 32
+        },
+        "best_score": -1176412.9
+    }
+}
