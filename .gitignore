@@ -8,9 +8,9 @@
 /build/
 
 # Ignore datasets
-/datasets/*
-!datasets/preprocessed/
-/datasets/preprocessed/clinical_mRNA(protein_coding).csv
+#/datasets/*
+#!datasets/preprocessed/
+#/datasets/preprocessed/clinical_mRNA(protein_coding).csv
 # Ignora file temporanei di editor
 .vscode/
 *.swp
