@@ -3,7 +3,7 @@ import os
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from  math import comb
+from math import (comb)
 
 import torch
 import torch.nn as nn
@@ -24,6 +24,8 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 NUM_FOLDS = 5
 SEED = 42
 VERBOSE = True
+USE_CLINICAL = True
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 random.seed(SEED)
 np.random.seed(SEED)
@@ -39,6 +41,7 @@ torch.use_deterministic_algorithms(False)
 # Paths
 base = os.path.basename(os.getcwd())
 list = os.getcwd().split(os.sep)
+list.pop()
 # list.pop(list.index(base))
 ROOT = '\\'.join(list)
 DATA_PATH = os.path.join(ROOT, 'datasets\\preprocessed')
@@ -68,59 +71,51 @@ def save_best_model(best_model, with_clinical, dataset, net_name):
 ################
 # Prepare Data #
 ################
-def prepare_data(path, with_clinical,kfold, device):
-    dataframe = pd.read_csv(path)
-    dataframe = dataframe.rename(columns={'Death': 'event', 'days_to_last_followup': 'duration'})
-    dataframe.drop(columns=['days_to_death'], inplace=True)
+def prepare_data(dataset, use_clinical):
+    y_cols = ['Death', 'days_to_last_followup', 'days_to_death']
+    y = dataset[['Death', 'days_to_last_followup']].copy()
+    y = y.rename(columns={'Death': 'event', 'days_to_last_followup': 'duration'})
 
-    if not with_clinical:
-        # remove clinical data columns
-        clinical_cols = [col for col in dataframe.columns if
-                         not col.startswith('hsa') and not col.startswith('gene.') and col not in ['duration', 'event']]
-        dataframe.drop(columns=clinical_cols, inplace=True)
+    if use_clinical:
+        print('INCLUDING clinical data')
+        X_cols = [col for col in dataset.columns if col not in y_cols]
+    else:
+        print('EXCLUDING clinical data')
+        miRNA_clinical_cols = [col for col in dataset.columns if col not in y_cols and 'hsa' not in col]
+        mRNA_clinical_cols = [col for col in dataset.columns if col not in y_cols and 'gene.' not in col]
+        X_cols = [col for col in dataset.columns if
+                  col not in y_cols and not col in miRNA_clinical_cols and col not in mRNA_clinical_cols]
 
-    y = dataframe[['duration', 'event']].copy()
+    X = dataset[X_cols].copy()
 
-    #############
-    # Z-scaling #
-    #############
-    cols_leave = [col for col in dataframe.columns if col.startswith('pathologic')]
-    cols_standardize = [col for col in dataframe.columns if col not in cols_leave + ['duration', 'event']]
+    return X, y
 
-    standardize = [([col], StandardScaler()) for col in cols_standardize]
-    leave = [(col, None) for col in cols_leave]
 
-    x_mapper = DataFrameMapper(standardize + leave)
-    scaled_X = x_mapper.fit_transform(dataframe).astype('float32')
-    scaled_X = pd.DataFrame(scaled_X, columns=[col for col in dataframe.columns if col not in ['duration', 'event']])
+def scale_data(X):
+    scaler = StandardScaler()
 
-    ##################
-    # Data splitting #
-    ##################
-    X_train, X_test, y_train, y_test = train_test_split(scaled_X, y, test_size=0.2, random_state=SEED, stratify=y['event'])
+    genes_cols = [col for col in X.columns if 'hsa' in col or 'gene.' in col]
+    genes_cols.append('age_at_initial_pathologic_diagnosis')
+    scaled_X = pd.DataFrame(scaler.fit_transform(X[genes_cols]), columns=genes_cols)
 
-    #####################
-    # Stratified K-fold #
-    #####################
-    fold_indexes = []
-    for train_idx, val_idx in kfold.split(X_train, y_train['event']):
-        fold_indexes.append((train_idx, val_idx))
+    X[genes_cols] = scaled_X
+    return X
 
-    ###############
-    # Data on GPU #
-    ###############
-    X_train_torch = torch.tensor(X_train.values, dtype=torch.float32, device=device)
-    X_test_torch = torch.tensor(X_test.values, dtype=torch.float32, device=device)
+
+def data_on_gpu(X_train, y_train, X_test, y_test):
+    X_train_torch = torch.tensor(X_train.values, dtype=torch.float32, device=DEVICE)
+    X_test_torch = torch.tensor(X_test.values, dtype=torch.float32, device=DEVICE)
     y_train_tuple = (
-        torch.tensor(y_train['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=device),
-        torch.tensor(y_train['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=device)
+        torch.tensor(y_train['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=DEVICE),
+        torch.tensor(y_train['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=DEVICE)
     )
     y_test_tuple = (
-        torch.tensor(y_test['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=device),
-        torch.tensor(y_test['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=device)
+        torch.tensor(y_test['duration'].to_numpy(dtype='float32'), dtype=torch.float32, device=DEVICE),
+        torch.tensor(y_test['event'].to_numpy(dtype='float32'), dtype=torch.float32, device=DEVICE)
     )
 
-    return X_train_torch, y_train_tuple, X_test_torch, y_test_tuple, fold_indexes
+    return X_train_torch, y_train_tuple, X_test_torch, y_test_tuple
+
 
 def create_model(in_features, params, network_class):
     if network_class == Net_3layers:
@@ -149,6 +144,7 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
             'hidden1': [32, 64, 128, 256],
             'hidden2': [16, 32, 64, 128],
             'dropout': [0.1, 0.3, 0.5, 0.7],
+            'epochs': [500],
             'lr': [1e-2, 1e-3],
             'batch_size': [32, 64]
         }
@@ -245,25 +241,36 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
     return best_result
 
 
-def flow(data_type, with_clinical, device, kfold):
-    dataset_path = os.path.join(DATA_PATH, AVAILABLE_DATASETS[data_type])
-    X_train, y_train, X_test, y_test, fold_indexes = prepare_data(dataset_path, with_clinical, kfold, device)
+def main():
+    datasets = [
+        'miRNA\\clinical_miRNA_normalized_log.csv',
+        'miRNA\\clinical_miRNA_normalized_quant.csv',
+        'mRNA\\clinical_mRNA_normalized_log.csv',
+        'mRNA\\clinical_mRNA_normalized_tpm_log.csv'
+    ]
 
-    best = surv(X_train, y_train, fold_indexes, Net_3layers, data_type)
-    save_best_model(best['model'], with_clinical, data_type, file="deepSurv_3")
+    for dataset_name in datasets:
+        print("Preparing data...".center(100, '-'))
+        dataset = pd.read_csv(os.path.join(DATA_PATH, dataset_name))
+        X, y = prepare_data(dataset, USE_CLINICAL)
+        X = scale_data(X)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=SEED,
+                                                            stratify=y['event'])
 
-    best = surv(X_train, y_train, fold_indexes, Net_5layers, data_type)
-    save_best_model(best['model'], with_clinical, data_type, file="deepSurv_5")
+        kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
+        fold_indexes = []
 
+        for train_idx, val_idx in kfold.split(X_train, y_train['event']):
+            fold_indexes.append((train_idx, val_idx))
 
-def main(data_type):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
+        X_train, X_test, y_train, y_test = data_on_gpu(X_train, y_train, X_test, y_test)
 
-    for with_clinical_data in [True, False]:
-        flow(data_type, with_clinical_data, device, kfold)
+        best = surv(X_train, y_train, fold_indexes, Net_3layers, dataset_name)
+        save_best_model(best['model'], USE_CLINICAL, dataset_name, file="deepSurv_3")
+
+        best = surv(X_train, y_train, fold_indexes, Net_5layers, dataset_name)
+        save_best_model(best['model'], USE_CLINICAL, dataset_name, file="deepSurv_5")
 
 
 if __name__ == "__main__":
-    for data in ["miRNA_log", "miRNA_quant", "mRNA_log", "mRNA_tpm_log"]:
-        main(data)
+    main()
