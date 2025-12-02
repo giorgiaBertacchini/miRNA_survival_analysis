@@ -3,7 +3,8 @@ import os
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from math import (comb)
+from functools import reduce
+import operator
 
 import torch
 import torch.nn as nn
@@ -14,7 +15,6 @@ from pycox.models import CoxPH
 from pycox.evaluation import EvalSurv
 
 from sklearn.preprocessing import StandardScaler
-from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split, StratifiedKFold, ParameterGrid
 
 from networks import Net_3layers, Net_5layers
@@ -35,8 +35,8 @@ os.environ['PYTHONHASHSEED'] = str(SEED)
 torch.cuda.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-torch.use_deterministic_algorithms(False)
+torch.backends.cudnn.benchmark = True  # False
+torch.use_deterministic_algorithms(True)  # False
 
 # Paths
 base = os.path.basename(os.getcwd())
@@ -163,10 +163,7 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
         }
 
     results = []
-    tot = 0
-    for v in param_grid.values():
-        tot += len(v)
-    combs = comb(tot, len(param_grid.keys()))
+    combs = reduce(operator.mul, (len(v) for v in param_grid.values()))
     print(f"Testing {combs} possible parameters combinations")
     i=1
 
@@ -198,29 +195,29 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
 
             callbacks = [tt.callbacks.EarlyStopping(patience=25)]
 
-            if events_val.sum() != 0:
-                log = model.fit(
-                    X_train_fold,
-                    y_train_fold,
-                    batch_size=params['batch_size'], epochs=params['epochs'],
-                    callbacks=callbacks,
-                    verbose=False,
-                    val_data=(X_val_fold, y_val_fold)
-                )
+            #if events_val.sum() != 0:
+            log = model.fit(
+                X_train_fold,
+                y_train_fold,
+                batch_size=params['batch_size'], epochs=params['epochs'],
+                callbacks=callbacks,
+                verbose=False,
+                val_data=(X_val_fold, y_val_fold)
+            )
 
-                ###############
-                # Evaltuation #
-                ###############
-                _ = model.compute_baseline_hazards()
-                surv_df = model.predict_surv_df(X_val_fold)
-                ev = EvalSurv(surv_df, y_val_fold[0].cpu().numpy(), y_val_fold[1].cpu().numpy(), censor_surv='km')
-                scores.append(ev.concordance_td())
+            ###############
+            # Evaltuation #
+            ###############
+            _ = model.compute_baseline_hazards()
+            surv_df = model.predict_surv_df(X_val_fold)
+            ev = EvalSurv(surv_df, y_val_fold[0].cpu().numpy(), y_val_fold[1].cpu().numpy(), censor_surv='km')
+            scores.append(ev.concordance_td())
 
         # results.append({'params': params, 'mean_concordance': np.mean(scores)})
         if np.mean(scores) > best_result['best_score']:
-            best_result['score'] = np.mean(scores)
-            best_result['params'] = params
-            best_result['model'] = model
+            best_result['best_score'] = np.mean(scores)
+            best_result['best_params'] = params
+            best_result['best_estimator'] = model
             best_result['loss'] = log
         
         results.append({
@@ -231,8 +228,12 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
         results[-1] = results[-1] | {f"split{i}_test_score":scores[i] for i in range(len(scores))}
 
     results = pd.DataFrame(results)
+
+    clean_name = dataset_name.replace("\\", "_").replace("/", "_")
     network_name = str(Net_3layers).split('.')[1].strip('\'>')
-    results.to_csv(os.path.join(ROOT, f'\\deepsurv_gcv_results\\{network_name}\\{dataset_name}.csv'), index=False)
+    out_dir = os.path.join(ROOT, "deepsurv_gcv_results", network_name)
+    os.makedirs(out_dir, exist_ok=True)
+    results.to_csv(os.path.join(out_dir, f"{clean_name}.csv"), index=False)
 
     print("\n✅ Migliori parametri trovati:")
     print(f"Miglior concordanza: {best_result['score']}")
@@ -263,13 +264,13 @@ def main():
         for train_idx, val_idx in kfold.split(X_train, y_train['event']):
             fold_indexes.append((train_idx, val_idx))
 
-        X_train, X_test, y_train, y_test = data_on_gpu(X_train, y_train, X_test, y_test)
+        X_train_gpu, y_train_gpu, X_test_gpu, y_test_gpu = data_on_gpu(X_train, y_train, X_test, y_test)
 
-        best = surv(X_train, y_train, fold_indexes, Net_3layers, dataset_name)
-        save_best_model(best['model'], USE_CLINICAL, dataset_name, file="deepSurv_3")
+        best = surv(X_train_gpu, y_train_gpu, fold_indexes, Net_3layers, dataset_name)
+        save_best_model(best['best_estimator'], USE_CLINICAL, dataset_name, net_name="deepSurv_3")
 
-        best = surv(X_train, y_train, fold_indexes, Net_5layers, dataset_name)
-        save_best_model(best['model'], USE_CLINICAL, dataset_name, file="deepSurv_5")
+        best = surv(X_train_gpu, y_train_gpu, fold_indexes, Net_5layers, dataset_name)
+        save_best_model(best['best_estimator'], USE_CLINICAL, dataset_name, net_name="deepSurv_5")
 
 
 if __name__ == "__main__":
