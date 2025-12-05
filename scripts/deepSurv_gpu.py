@@ -215,9 +215,9 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
 
         # results.append({'params': params, 'mean_concordance': np.mean(scores)})
         if np.mean(scores) > best_result['best_score']:
-            best_result['best_score'] = np.mean(scores)
-            best_result['best_params'] = params
-            best_result['best_estimator'] = model
+            best_result['score'] = np.mean(scores)
+            best_result['params'] = params
+            best_result['model'] = model
             best_result['loss'] = log
         
         results.append({
@@ -228,12 +228,8 @@ def surv(X, y, fold_indexes, network_class, dataset_name):
         results[-1] = results[-1] | {f"split{i}_test_score":scores[i] for i in range(len(scores))}
 
     results = pd.DataFrame(results)
-
-    clean_name = dataset_name.replace("\\", "_").replace("/", "_")
     network_name = str(Net_3layers).split('.')[1].strip('\'>')
-    out_dir = os.path.join(ROOT, "deepsurv_gcv_results", network_name)
-    os.makedirs(out_dir, exist_ok=True)
-    results.to_csv(os.path.join(out_dir, f"{clean_name}.csv"), index=False)
+    results.to_csv(os.path.join(ROOT, f'\\deepsurv_gcv_results\\{network_name}\\{dataset_name}'), index=False)
 
     print("\n✅ Migliori parametri trovati:")
     print(f"Miglior concordanza: {best_result['score']}")
