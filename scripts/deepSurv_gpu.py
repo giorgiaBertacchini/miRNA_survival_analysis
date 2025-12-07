@@ -114,6 +114,8 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
 
     for i, params in enumerate(ParameterGrid(param_grid), 1):
         scores = []
+        model = None
+        log = None
         print(f"Testing {i}/{total_combs }".center(100, '='))
         for train_idx, val_idx in fold_indexes:
             X_train_fold_np = X[train_idx].cpu().numpy()
