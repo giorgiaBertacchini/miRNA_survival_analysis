@@ -109,7 +109,7 @@ def create_model(in_features, params, network_class):
 
 
 # ------------------ CROSS-VALIDATION ------------------
-def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
+def cross_validate(X, y, fold_indexes, subtype, network_class, param_grid, dataset_name):
     #in_features = X.shape[1]
     in_features = N_COMPONENTS  # In caso di PCA
     best_result = {'best_score': -1, 'best_params': None, 'best_model': None}
@@ -118,6 +118,7 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
     print(f"Testing {total_combs } possible parameters combinations")
 
     results = []
+    saved_times_csv = False
 
     for i, params in enumerate(ParameterGrid(param_grid), 1):
         cindex_scores = []
@@ -125,7 +126,7 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
         times_folds = []
         ibs_scores = []
         model = None
-        log = None
+
         print(f"Testing {i}/{total_combs }".center(100, '='))
         for train_idx, val_idx in fold_indexes:
             X_train_fold_np = X[train_idx].cpu().numpy()
@@ -175,6 +176,15 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
             ibs = ev.integrated_brier_score(times)
             ibs_scores.append(ibs)
 
+        if not saved_times_csv:
+            times_dict = {f"times_fold{i + 1}": [times_folds[i]] for i in range(len(times_folds))}
+            df_times = pd.DataFrame(times_dict)
+            save_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name)
+            os.makedirs(save_dir, exist_ok=True)
+            df_times.to_csv(os.path.join(save_dir, "times_by_fold.csv"), index=False)
+
+            saved_times_csv = True
+
         mean_score = np.mean(cindex_scores)
         results.append({'params': params, 'mean_concordance': mean_score, 'std_concordance': np.std(cindex_scores)})
         if mean_score > best_result['best_score']:
@@ -189,17 +199,13 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
             for i in range(len(brier_scores))
         }
         results[-1] |= {
-            f"split{i}_times": times_folds[i]
-            for i in range(len(times_folds))
-        }
-        results[-1] |= {
             f"split{i}_ibs": ibs_scores[i]
             for i in range(len(ibs_scores))
         }
 
     results = pd.DataFrame(results)
     network_name = str(network_class).split('.')[1].strip('\'>')
-    results.to_csv(os.path.join(ROOT, f'deepsurv_gcv_results\\{network_name}\\{dataset_name}.csv'), index=False)
+    results.to_csv(os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'cv_results_{network_name}.csv'), index=False)
 
     print("\n✅ Migliori parametri trovati:")
     print(f"Miglior concordanza: {best_result['best_score']}")
@@ -218,13 +224,26 @@ def save_model(final_model, pca_model, subtype, dataset_name, network_name, use_
     import joblib
     joblib.dump(pca_model, pca_path)"""
 
-
 # ------------------- PLOTS -------------------
-def plots(best_res):
+def plots(best_res, times_csv_path):
     scores = best_res[[col for col in best_res.columns if 'split' in col and 'c_index' in col]].values.flatten()
-    times_folds = best_res[[col for col in best_res.columns if 'split' in col and 'times' in col]].values.flatten()
+    #times_folds = best_res[[col for col in best_res.columns if 'split' in col and 'times' in col]].values.flatten()
+
     brier_scores = best_res[[col for col in best_res.columns if 'split' in col and 'brier_score' in col]].values.flatten()
     ibs_folds = best_res[[col for col in best_res.columns if 'split' in col and 'ibs' in col]].values.flatten()
+
+    # --- Leggi times_folds dal CSV ---
+    df_times = pd.read_csv(times_csv_path)
+    times_folds = []
+    for col in df_times.columns:
+        # Converti la stringa in lista reale usando ast.literal_eval
+        # Questo trasforma "[np.float32(1.0), np.float32(116.0), ...]" in lista di float
+        str_list = df_times[col].iloc[0]  # c'è solo una riga
+        # Rimuove np.float32 e converte in float
+        cleaned_list = [float(s.strip().replace("np.float32(", "").replace(")", "")) for s in
+                        str_list.strip("[]").split(",")]
+        times_folds.append(cleaned_list)
+
 
     # Boxplot C-index
     plt.figure(figsize=(6, 5))
@@ -384,8 +403,8 @@ def main():
 
         output_dir = os.path.join(ROOT, 'deepsurv_results', subtype)
         os.makedirs(output_dir, exist_ok=True)
-        gcv_3_output_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, 'Net_3layers')
-        gcv_5_output_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, 'Net_5layers')
+        gcv_3_output_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name)
+        gcv_5_output_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name)
         os.makedirs(gcv_3_output_dir, exist_ok=True)
         os.makedirs(gcv_5_output_dir, exist_ok=True)
 
@@ -416,9 +435,10 @@ def main():
             'batch_size': [64]
         }
 
-        best_3, results_3 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, Net_3layers, param_grid_3, dataset_name)
+        best_3, results_3 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, subtype, Net_3layers, param_grid_3, dataset_name)
         best_res_3 = results_3[results_3['params'] == best_3['best_params']]
-        plots(best_res_3)
+        times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
+        plots(best_res_3, times_csv_path)
 
         # ---------------- 5 LAYERS ----------------
         """param_grid_5 = {
@@ -431,10 +451,10 @@ def main():
             'dropout': [0.3], 'lr': [0.01], 'batch_size': [32],
             'epochs': [200], 'weight_decay': [1e-6], 'lr_factor': [0.7]
         }
-        best_5, results_5 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, Net_5layers, param_grid_5,
+        best_5, results_5 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, subtype, Net_5layers, param_grid_5,
                                            dataset_name)
         best_res_5 = results_5[results_5['params'] == best_5['best_params']]
-        plots(best_res_5)
+        plots(best_res_5, times_csv_path)
 
 
 if __name__ == "__main__":
