@@ -1,6 +1,7 @@
 import random
 import os
 from functools import reduce
+from scipy.interpolate import interp1d
 
 import numpy as np
 import operator
@@ -12,15 +13,21 @@ from pycox.evaluation import EvalSurv
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, StratifiedKFold, ParameterGrid
+import matplotlib.pyplot as plt
 
 from networks import Net_3layers, Net_5layers
 
+# Fix for scipy version compatibility
+import scipy.integrate
+if not hasattr(scipy.integrate, "simps"):
+    scipy.integrate.simps = scipy.integrate.simpson
+    
 # ---------------------- CONFIG ----------------------
-NUM_FOLDS = 5
+NUM_FOLDS = 5  # TODO 10
 SEED = 42
 USE_CLINICAL = True
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-N_COMPONENTS = 50
+N_COMPONENTS = 50  # TODO Aumentare per mRNA
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
@@ -41,7 +48,7 @@ list_path = os.getcwd().split(os.sep)
 list_path.pop()
 # list.pop(list.index(base))
 ROOT = '\\'.join(list_path)
-DATA_PATH = os.path.join(ROOT, 'datasets\\preprocessed')
+DATA_PATH = os.path.join(ROOT, 'datasets/preprocessed')
 
 
 # ---------------------- DATA -----------------------
@@ -104,7 +111,7 @@ def create_model(in_features, params, network_class):
 # ------------------ CROSS-VALIDATION ------------------
 def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
     #in_features = X.shape[1]
-    in_features = N_COMPONENTS
+    in_features = N_COMPONENTS  # In caso di PCA
     best_result = {'best_score': -1, 'best_params': None, 'best_model': None}
 
     total_combs = reduce(operator.mul, (len(v) for v in param_grid.values()))
@@ -113,7 +120,10 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
     results = []
 
     for i, params in enumerate(ParameterGrid(param_grid), 1):
-        scores = []
+        cindex_scores = []
+        brier_scores = []
+        times_folds = []
+        ibs_scores = []
         model = None
         log = None
         print(f"Testing {i}/{total_combs }".center(100, '='))
@@ -127,6 +137,10 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
             X_train_fold = torch.tensor(X_train_pca, dtype=torch.float32, device=DEVICE)
             X_val_fold = torch.tensor(X_val_pca, dtype=torch.float32, device=DEVICE)
 
+            # Se non PCA:
+            #X_train_fold = torch.tensor(X_train_fold_np, dtype=torch.float32, device=DEVICE)
+            #X_val_fold = torch.tensor(X_val_fold_np, dtype=torch.float32, device=DEVICE)
+
             y_train_fold = (y[0][train_idx], y[1][train_idx])
             y_val_fold = (y[0][val_idx], y[1][val_idx])
             #X_train_fold = X[train_idx]
@@ -137,74 +151,244 @@ def cross_validate(X, y, fold_indexes, network_class, param_grid, dataset_name):
             log = model.fit(X_train_fold, y_train_fold,
                             batch_size=params['batch_size'], epochs=params['epochs'],
                             callbacks=[tt.callbacks.EarlyStopping(patience=25)],
-                            verbose=False, val_data=(X_val_fold, y_val_fold))
+                            verbose=True, val_data=(X_val_fold, y_val_fold))
 
             _ = model.compute_baseline_hazards()
             surv_df = model.predict_surv_df(X_val_fold)
-            ev = EvalSurv(surv_df, y_val_fold[0].cpu().numpy(), y_val_fold[1].cpu().numpy(), censor_surv='km')
-            scores.append(ev.concordance_td())
 
-        mean_score = np.mean(scores)
-        results.append({'params': params, 'mean_concordance': mean_score, 'std_concordance': np.std(scores)})
+            # EvalSurv
+            ev = EvalSurv(surv_df,
+                          y_val_fold[0].cpu().numpy(),
+                          y_val_fold[1].cpu().numpy(),
+                          censor_surv='km')
+
+            # C-index
+            cindex_scores.append(ev.concordance_td())
+
+            # Brier score
+            times = surv_df.index.values
+            bs = ev.brier_score(times)
+            brier_scores.append(list(bs))
+            times_folds.append(list(times))
+
+            # Integrated Brier Score
+            ibs = ev.integrated_brier_score(times)
+            ibs_scores.append(ibs)
+
+        mean_score = np.mean(cindex_scores)
+        results.append({'params': params, 'mean_concordance': mean_score, 'std_concordance': np.std(cindex_scores)})
         if mean_score > best_result['best_score']:
-            best_result = {'best_score': mean_score, 'best_params': params, 'best_model': model, 'loss': log}
+            best_result = {'best_score': mean_score, 'best_params': params, 'best_model': model}
 
-        results[-1] = results[-1] | {f"split{i}_test_score":scores[i] for i in range(len(scores))}
+        results[-1] |= {
+            f"split{i}_c_index": cindex_scores[i]
+            for i in range(len(cindex_scores))
+        }
+        results[-1] |= {
+            f"split{i}_brier_score": brier_scores[i]
+            for i in range(len(brier_scores))
+        }
+        results[-1] |= {
+            f"split{i}_times": times_folds[i]
+            for i in range(len(times_folds))
+        }
+        results[-1] |= {
+            f"split{i}_ibs": ibs_scores[i]
+            for i in range(len(ibs_scores))
+        }
 
     results = pd.DataFrame(results)
-    network_name = str(Net_3layers).split('.')[1].strip('\'>')
-    results.to_csv(os.path.join(ROOT, f'\\deepsurv_gcv_results\\{network_name}\\{dataset_name}'), index=False)
+    network_name = str(network_class).split('.')[1].strip('\'>')
+    results.to_csv(os.path.join(ROOT, f'deepsurv_gcv_results\\{network_name}\\{dataset_name}.csv'), index=False)
 
     print("\n✅ Migliori parametri trovati:")
-    print(f"Miglior concordanza: {best_result['score']}")
-    print(f"Migliori parametri: {best_result['params']}")
+    print(f"Miglior concordanza: {best_result['best_score']}")
+    print(f"Migliori parametri: {best_result['best_params']}")
     print(f"Concordanza media: {results['mean_concordance'].mean()}")
     return best_result, results
 
 
-# ------------------ FINAL RETRAIN ------------------
-def final_retrain(X_train_gpu, X_test_gpu, y_train_gpu, best_result, network_class):
-    X_train_np = X_train_gpu.cpu().numpy()
-    X_test_np = X_test_gpu.cpu().numpy()
-
-    X_train_pca, pca_model = fit_transform_pca(X_train_np)
-    X_test_pca = pca_model.transform(X_test_np)
-
-    X_train_pca_gpu = torch.tensor(X_train_pca, dtype=torch.float32, device=DEVICE)
-    X_test_pca_gpu = torch.tensor(X_test_pca, dtype=torch.float32, device=DEVICE)
-
-    final_model = create_model(N_COMPONENTS, best_result['best_params'], network_class)
-    final_model.fit(X_train_pca_gpu, y_train_gpu,
-                    batch_size=best_result['params']['batch_size'],
-                    epochs=best_result['params']['epochs'],
-                    verbose=True)
-
-    return final_model, pca_model, X_test_pca_gpu
-
-
 # ------------------ SAVE MODEL ------------------
-def save_model(final_model, pca_model, dataset_name, network_name, use_clinical=USE_CLINICAL):
+def save_model(final_model, pca_model, subtype, dataset_name, network_name, use_clinical=USE_CLINICAL):
     clinical_tag = "clinical" if use_clinical else "no_clinical"
-    model_path = os.path.join(ROOT, 'models', 'mlp', f"{dataset_name}__{network_name}__{clinical_tag}.pth")
-    torch.save(final_model.state_dict(), model_path)
+    model_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__{network_name}__{clinical_tag}.pth")
+    torch.save(final_model.net.state_dict(), model_path)
 
-    #pca_path = os.path.join(ROOT, 'models', 'mlp', f"{dataset_name}__{network_name}__{clinical_tag}_pca.pkl")
-    #import joblib
-    #joblib.dump(pca_model, pca_path)
+    """pca_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__{network_name}__{clinical_tag}_pca.pkl")
+    import joblib
+    joblib.dump(pca_model, pca_path)"""
+
+
+# ------------------- PLOTS -------------------
+def plots(best_res):
+    scores = best_res[[col for col in best_res.columns if 'split' in col and 'c_index' in col]].values.flatten()
+    times_folds = best_res[[col for col in best_res.columns if 'split' in col and 'times' in col]].values.flatten()
+    brier_scores = best_res[[col for col in best_res.columns if 'split' in col and 'brier_score' in col]].values.flatten()
+    ibs_folds = best_res[[col for col in best_res.columns if 'split' in col and 'ibs' in col]].values.flatten()
+
+    # Boxplot C-index
+    plt.figure(figsize=(6, 5))
+    plt.boxplot(scores, vert=True, patch_artist=True)
+    plt.title("Distribuzione C-index sui fold")
+    plt.ylabel("C-index")
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.show()
+
+    # Plot Brier score per fold
+    max_common = min(np.max(np.array(t)) for t in times_folds)
+    min_common = max(np.min(np.array(t)) for t in times_folds)
+    time_grid = np.linspace(min_common, max_common, 300)  # puoi cambiare risoluzione
+    brier_interp = []
+
+    for times, bs in zip(times_folds, brier_scores):
+        # crea interpolatore lineare
+        f = interp1d(times, bs, kind='nearest', bounds_error=False, fill_value=np.nan)
+        # valutiamo sul time_grid
+        brier_interp.append(f(time_grid))
+
+    # ---- IBS Statistics ----
+    ibs_mean = np.mean(ibs_folds)
+    ibs_std = np.std(ibs_folds)
+    ibs_min = np.min(ibs_folds)
+    ibs_max = np.max(ibs_folds)
+    ibs_p25 = np.percentile(ibs_folds, 25)
+    ibs_p50 = np.percentile(ibs_folds, 50)
+    ibs_p75 = np.percentile(ibs_folds, 75)
+
+    plt.figure(figsize=(8, 6))
+    for i, bs in enumerate(brier_interp):
+        plt.plot(time_grid, bs, alpha=0.6, label=f"Fold {i}")
+    plt.title("Brier Score per Fold (ricampionate su griglia comune)\n\n"
+              f"IBS — Mean: {ibs_mean:.4f} | Std: {ibs_std:.4f} | "
+              f"Min: {ibs_min:.4f} | Max: {ibs_max:.4f} |\n"
+              f"P25: {ibs_p25:.4f} | Median: {ibs_p50:.4f} | P75: {ibs_p75:.4f}")
+    plt.xlabel("Tempo")
+    plt.ylabel("Brier Score")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    plt.show()
+
+
+def save_plots(final_model, pca_model, X_test_pca_gpu, y_test, dataset_name, network_name):
+    X_test_np = X_test_pca_gpu.cpu().numpy()
+    durations = y_test['duration'].values
+    events = y_test['event'].values
+
+    print(final_model.baseline_hazards_)
+    print(final_model.baseline_cumulative_hazards_)
+
+    # Predizione curve di sopravvivenza
+    surv = final_model.predict_surv_df(torch.tensor(X_test_np, dtype=torch.float32))
+
+    # Checks
+    print("Eventi nel test set:", np.unique(events, return_counts=True))
+    print("Durate min/max:", durations.min(), durations.max())
+    print("Surv shape:", surv.shape, "Surv nan:", np.isnan(surv.values).sum())
+
+    # EvalSurv
+    ev = EvalSurv(surv, durations, events, censor_surv="km")
+
+    time_grid = np.linspace(durations.min(), durations.max(), 100)
+    brier_scores = ev.brier_score(time_grid)
+
+    # Integrated Brier Score (IBS)
+    ibs = ev.integrated_brier_score(time_grid)
+    print(f"📉 IBS (Integrated Brier Score): {ibs:.4f}")
+
+    # ------------ Time-dependent ------------
+    cindex_global = ev.concordance_td()
+    print(f"📈 C-index (global): {cindex_global:.4f}")
+
+    # -------- PLOT FIGURE -------
+    plt.figure(figsize=(18, 14))
+
+    # 1. Survival curves
+    plt.subplot(2, 3, 1)
+    for i in range(min(30, surv.shape[1])):
+        plt.step(surv.index, surv.iloc[:, i], where="post", alpha=0.3)
+    plt.title("Survival curves (test set)")
+    plt.xlabel("Time")
+    plt.ylabel("Survival probability")
+
+    # 2. Training loss
+    if hasattr(final_model, "log"):
+        log = final_model.log
+        plt.subplot(2, 3, 2)
+        plt.plot(log.loss, label="train")
+        if hasattr(log, "val_loss"):
+            plt.plot(log.val_loss, label="valid")
+        plt.title("Training / Validation loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+
+    # 3. PCA variance
+    plt.subplot(2, 3, 3)
+    plt.plot(np.cumsum(pca_model.explained_variance_ratio_))
+    plt.title("PCA cumulative explained variance")
+    plt.xlabel("Components")
+    plt.ylabel("Cumulative variance")
+
+    # 4. Brier score vs time
+    plt.subplot(2, 3, 4)
+    plt.plot(time_grid, brier_scores)
+    plt.title(f"Brier score over time\nIBS = {ibs:.4f}")
+    plt.xlabel("Time")
+    plt.ylabel("Brier score")
+
+    # 5. C-index
+    plt.subplot(2, 3, 5)
+    plt.bar(["C-index"], [cindex_global])
+    plt.ylim(0, 1)
+    plt.title("Global C-index")
+
+    # 6. IBS (single bar)
+    plt.subplot(2, 3, 6)
+    plt.bar(["IBS"], [ibs])
+    plt.ylim(0, 1)
+    plt.title("Integrated Brier Score")
+
+    # ---- Save PNG ----
+    fig_path = os.path.join(
+        ROOT, "deepsurv_results", f"{dataset_name}__{network_name}.png"
+    )
+    os.makedirs(os.path.dirname(fig_path), exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(fig_path)
+    plt.close()
+
+    print(f"📊 Saved plot: {fig_path}")
 
 
 def main():
+    """datasets = [
+        'miRNA/clinical_miRNA_normalized_log.csv',
+        'miRNA/clinical_miRNA_normalized_quant.csv',
+        'mRNA/clinical_mRNA_normalized_log.csv',
+        'mRNA/clinical_mRNA_normalized_tpm_log.csv'
+    ]"""
     datasets = [
-        'miRNA\\clinical_miRNA_normalized_log.csv',
-        'miRNA\\clinical_miRNA_normalized_quant.csv',
-        'mRNA\\clinical_mRNA_normalized_log.csv',
-        'mRNA\\clinical_mRNA_normalized_tpm_log.csv'
+        'miRNA/clinical_miRNA_normalized_log.csv',
     ]
 
-    for dataset_file  in datasets:
+    # Create output dirs
+    output_dir = os.path.join(ROOT, 'deepsurv_results')
+    os.makedirs(output_dir, exist_ok=True)
+
+    for dataset_file in datasets:
         print("Preparing data...".center(100, '-'))
         dataset_name = os.path.basename(dataset_file).replace(".csv", "")
-        dataset = pd.read_csv(os.path.join(DATA_PATH, dataset_name))
+        dataset = pd.read_csv(os.path.join(DATA_PATH, dataset_file))
+        subtype = dataset_file.split('/')[0]
+
+        output_dir = os.path.join(ROOT, 'deepsurv_results', subtype)
+        os.makedirs(output_dir, exist_ok=True)
+        gcv_3_output_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, 'Net_3layers')
+        gcv_5_output_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, 'Net_5layers')
+        os.makedirs(gcv_3_output_dir, exist_ok=True)
+        os.makedirs(gcv_5_output_dir, exist_ok=True)
+
         X, y = prepare_data(dataset)
         X = scale_data(X)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=SEED,
@@ -215,28 +399,42 @@ def main():
         fold_indexes = list(kfold.split(X_train, y_train['event']))
 
         # ---------------- 3 LAYERS ----------------
+        """param_grid_3 = {
+            'hidden1': [32, 64, 128, 256],
+            'hidden2': [16, 32, 64, 128],
+            'dropout': [0.1, 0.3, 0.5, 0.7],
+            'epochs': [150, 300, 500],
+            'lr': [1e-2, 1e-3, 1e-4],
+            'batch_size': [32, 64]
+        }"""
         param_grid_3 = {
-            'hidden1': [32, 64, 128, 256], 'hidden2': [16, 32, 64, 128],
-            'dropout': [0.1, 0.3, 0.5, 0.7], 'epochs': [500],
-            'lr': [1e-2, 1e-3], 'batch_size': [32, 64]
+            'hidden1': [32],
+            'hidden2': [128],
+            'dropout': [0.5],
+            'epochs': [150],
+            'lr': [1e-2, 1e-3, 1e-4],
+            'batch_size': [64]
         }
-        best_3, results_3 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, Net_3layers, param_grid_3,
-                                           dataset_name)
-        final_model_3, pca_model_3, X_test_pca_3 = final_retrain(X_train_gpu, X_test_gpu, y_train_gpu, best_3,
-                                                                 Net_3layers)
-        save_model(final_model_3, pca_model_3, dataset_name, "deepSurv_3")
+
+        best_3, results_3 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, Net_3layers, param_grid_3, dataset_name)
+        best_res_3 = results_3[results_3['params'] == best_3['best_params']]
+        plots(best_res_3)
 
         # ---------------- 5 LAYERS ----------------
-        param_grid_5 = {
+        """param_grid_5 = {
             'hidden1': [128, 256], 'hidden2': [64, 128], 'hidden3': [32, 64], 'hidden4': [16, 32],
             'dropout': [0.3, 0.5], 'lr': [0.01, 0.001, 0.0001], 'batch_size': [32, 64, 128],
             'epochs': [200, 500], 'weight_decay': [1e-6, 1e-5, 1e-4], 'lr_factor': [0.7, 0.5]
+        }"""
+        param_grid_5 = {
+            'hidden1': [128, 256], 'hidden2': [64, 128], 'hidden3': [32], 'hidden4': [16],
+            'dropout': [0.3], 'lr': [0.01], 'batch_size': [32],
+            'epochs': [200], 'weight_decay': [1e-6], 'lr_factor': [0.7]
         }
         best_5, results_5 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, Net_5layers, param_grid_5,
                                            dataset_name)
-        final_model_5, pca_model_5, X_test_pca_5 = final_retrain(X_train_gpu, X_test_gpu, y_train_gpu, best_5,
-                                                                 Net_5layers)
-        save_model(final_model_5, pca_model_5, dataset_name, "deepSurv_5")
+        best_res_5 = results_5[results_5['params'] == best_5['best_params']]
+        plots(best_res_5)
 
 
 if __name__ == "__main__":
