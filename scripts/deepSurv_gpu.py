@@ -79,21 +79,37 @@ def scale_data(X):
     return X
 
 
-def data_to_gpu(X_train, y_train, X_test, y_test):
-    X_train_t = torch.tensor(X_train.values, dtype=torch.float32, device=DEVICE)
-    X_test_t = torch.tensor(X_test.values, dtype=torch.float32, device=DEVICE)
-    y_train_t = (torch.tensor(y_train['duration'].to_numpy(dtype='float32'), device=DEVICE),
-                 torch.tensor(y_train['event'].to_numpy(dtype='float32'), device=DEVICE))
-    y_test_t = (torch.tensor(y_test['duration'].to_numpy(dtype='float32'), device=DEVICE),
-                torch.tensor(y_test['event'].to_numpy(dtype='float32'), device=DEVICE))
-    return X_train_t, y_train_t, X_test_t, y_test_t
+def data_to_gpu(X, y):
+    if hasattr(X, "values"):
+        X_np = X.values
+    else:
+        X_np = X
+    X_t = torch.tensor(X_np, dtype=torch.float32, device=DEVICE)
+    y_t = (torch.tensor(y['duration'].to_numpy(dtype='float32'), device=DEVICE),
+           torch.tensor(y['event'].to_numpy(dtype='float32'), device=DEVICE))
+    return X_t, y_t
 
 
 # ---------------------- PCA ------------------------
-def fit_transform_pca(X_train_np, n_components=N_COMPONENTS):
+def fit_transform_pca(X_df, n_components=N_COMPONENTS):
+    """
+    Applica PCA solo alle colonne non cliniche (hsa*, gene.*)
+    e restituisce una matrice completa X_pca + colonne cliniche originali.
+    """
+    pca_cols = [col for col in X_df.columns if col.startswith('hsa') or col.startswith('gene.')]
+    clinical_cols = [col for col in X_df.columns if col not in pca_cols]
+
     pca = PCA(n_components=n_components)
-    X_train_pca = pca.fit_transform(X_train_np)
-    return X_train_pca, pca
+    X_pca = pca.fit_transform(X_df[pca_cols].values)
+
+    X_combined = np.concatenate([X_df[clinical_cols].values, X_pca], axis=1)
+
+    new_feature_names = (
+        [f"PCA_{i+1}" for i in range(n_components)] +
+        clinical_cols
+    )
+
+    return X_combined, pca, new_feature_names
 
 
 # ---------------------- MODEL ----------------------
@@ -110,8 +126,7 @@ def create_model(in_features, params, network_class):
 
 # ------------------ CROSS-VALIDATION ------------------
 def cross_validate(X, y, fold_indexes, subtype, network_class, param_grid, dataset_name):
-    #in_features = X.shape[1]
-    in_features = N_COMPONENTS  # In caso di PCA
+    in_features = X.shape[1]
     best_result = {'best_score': -1, 'best_params': None, 'best_model': None}
 
     total_combs = reduce(operator.mul, (len(v) for v in param_grid.values()))
@@ -129,14 +144,16 @@ def cross_validate(X, y, fold_indexes, subtype, network_class, param_grid, datas
 
         print(f"Testing {i}/{total_combs }".center(100, '='))
         for train_idx, val_idx in fold_indexes:
-            X_train_fold_np = X[train_idx].cpu().numpy()
-            X_val_fold_np = X[val_idx].cpu().numpy()
+            X_train_fold = X[train_idx]
+            X_val_fold = X[val_idx]
+            #X_train_fold_np = X[train_idx].cpu().numpy()
+            #X_val_fold_np = X[val_idx].cpu().numpy()
 
-            X_train_pca, pca_model = fit_transform_pca(X_train_fold_np)
-            X_val_pca = pca_model.transform(X_val_fold_np)
+            #X_train_pca, pca_model = fit_transform_pca(X_train_fold_np)
+            #X_val_pca = pca_model.transform(X_val_fold_np)
 
-            X_train_fold = torch.tensor(X_train_pca, dtype=torch.float32, device=DEVICE)
-            X_val_fold = torch.tensor(X_val_pca, dtype=torch.float32, device=DEVICE)
+            #X_train_fold = torch.tensor(X_train_pca, dtype=torch.float32, device=DEVICE)
+            #X_val_fold = torch.tensor(X_val_pca, dtype=torch.float32, device=DEVICE)
 
             # Se non PCA:
             #X_train_fold = torch.tensor(X_train_fold_np, dtype=torch.float32, device=DEVICE)
@@ -215,169 +232,140 @@ def cross_validate(X, y, fold_indexes, subtype, network_class, param_grid, datas
 
 
 # ------------------ SAVE MODEL ------------------
-def save_model(final_model, pca_model, subtype, dataset_name, network_name, use_clinical=USE_CLINICAL):
+def save_model(final_model, subtype, dataset_name, network_name, use_clinical=USE_CLINICAL):
     clinical_tag = "clinical" if use_clinical else "no_clinical"
     model_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__{network_name}__{clinical_tag}.pth")
     torch.save(final_model.net.state_dict(), model_path)
 
-    """pca_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__{network_name}__{clinical_tag}_pca.pkl")
-    import joblib
-    joblib.dump(pca_model, pca_path)"""
 
 # ------------------- PLOTS -------------------
-def plots(best_res, times_csv_path):
-    scores = best_res[[col for col in best_res.columns if 'split' in col and 'c_index' in col]].values.flatten()
-    #times_folds = best_res[[col for col in best_res.columns if 'split' in col and 'times' in col]].values.flatten()
+def plots(best_res_3, best_res_5, pca_model, times_csv_path, feature_names, plot_path):
+    fig, axes = plt.subplots(3, 2, figsize=(16, 20))
+    ax1, ax_empty, ax2, ax3, ax4, ax5 = axes.flatten()
 
-    brier_scores = best_res[[col for col in best_res.columns if 'split' in col and 'brier_score' in col]].values.flatten()
-    ibs_folds = best_res[[col for col in best_res.columns if 'split' in col and 'ibs' in col]].values.flatten()
+    ax_empty.axis("off")
+    ax_empty.set_title("")
 
-    # --- Leggi times_folds dal CSV ---
+    # -----------------------------------------------------------
+    # (A) PCA FEATURE IMPORTANCE
+    # -----------------------------------------------------------
+    loadings = pca_model.components_.T * np.sqrt(pca_model.explained_variance_)
+    pc1_importances = np.abs(loadings[:, 0])
+
+    top_k = 20
+    idx_top = np.argsort(pc1_importances)[-top_k:][::-1]
+    top_features = np.array(feature_names)[idx_top]
+    top_values = pc1_importances[idx_top]
+
+    ax1.barh(top_features, top_values)
+    ax1.set_title("Top PCA Feature Importances (PC1)")
+    ax1.set_xlabel("Loading |PC1|")
+    ax1.invert_yaxis()
+
+    # -----------------------------------------------------------
+    # CARICAMENTO TIMES UNA SOLA VOLTA
+    # -----------------------------------------------------------
     df_times = pd.read_csv(times_csv_path)
     times_folds = []
     for col in df_times.columns:
-        # Converti la stringa in lista reale usando ast.literal_eval
-        # Questo trasforma "[np.float32(1.0), np.float32(116.0), ...]" in lista di float
-        str_list = df_times[col].iloc[0]  # c'è solo una riga
-        # Rimuove np.float32 e converte in float
-        cleaned_list = [float(s.strip().replace("np.float32(", "").replace(")", "")) for s in
-                        str_list.strip("[]").split(",")]
+        str_list = df_times[col].iloc[0]
+        cleaned_list = [
+            float(s.strip().replace("np.float32(", "").replace(")", ""))
+            for s in str_list.strip("[]").split(",")
+        ]
         times_folds.append(cleaned_list)
 
+    # -----------------------------------------------------------
+    # (B) MODELLO 3-LAYER → BOX C-INDEX
+    # -----------------------------------------------------------
+    scores_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'c_index' in col]].values.flatten()
 
-    # Boxplot C-index
-    plt.figure(figsize=(6, 5))
-    plt.boxplot(scores, vert=True, patch_artist=True)
-    plt.title("Distribuzione C-index sui fold")
-    plt.ylabel("C-index")
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.show()
+    ax2.boxplot(scores_3, vert=True, patch_artist=True)
+    ax2.set_title("Distribuzione C-index sui fold")
+    ax2.set_ylabel("C-index")
+    ax2.grid(True, linestyle="--", alpha=0.5)
 
-    # Plot Brier score per fold
+    # -----------------------------------------------------------
+    # (C) MODELLO 3-LAYER → BRIER CURVES
+    # -----------------------------------------------------------
+    brier_scores_3 = best_res_3[
+        [col for col in best_res_3.columns if 'split' in col and 'brier_score' in col]].values.flatten()
+    ibs_folds_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'ibs' in col]].values.flatten()
+
+    max_common = min(np.max(np.array(t)) for t in times_folds)
+    min_common = max(np.min(np.array(t)) for t in times_folds)
+    time_grid = np.linspace(min_common, max_common, 300)  # puoi cambiare risoluzione
+
+    ibs_mean = np.mean(ibs_folds_3)
+    ibs_std = np.std(ibs_folds_3)
+    ibs_min = np.min(ibs_folds_3)
+    ibs_max = np.max(ibs_folds_3)
+    ibs_p25 = np.percentile(ibs_folds_3, 25)
+    ibs_p50 = np.percentile(ibs_folds_3, 50)
+    ibs_p75 = np.percentile(ibs_folds_3, 75)
+
+    for i, (times, bs) in enumerate(zip(times_folds, brier_scores_3)):
+        f = interp1d(times, bs, kind='nearest', bounds_error=False, fill_value=np.nan)
+        ax3.plot(time_grid, f(time_grid), alpha=0.6, label=f"Fold {i}")
+
+    ax3.set_title("Brier Score per Fold (ricampionate su griglia comune)\n\n"
+              f"IBS — Mean: {ibs_mean:.4f} | Std: {ibs_std:.4f} | "
+              f"Min: {ibs_min:.4f} | Max: {ibs_max:.4f} |\n"
+              f"P25: {ibs_p25:.4f} | Median: {ibs_p50:.4f} | P75: {ibs_p75:.4f}")
+    ax3.set_xlabel("Tempo")
+    ax3.set_ylabel("Brier Score")
+    ax3.legend()
+    ax3.grid(True, linestyle="--", alpha=0.4)
+
+    # -----------------------------------------------------------
+    # (D) MODELLO 5-LAYER → BOX C-INDEX
+    # -----------------------------------------------------------
+    scores_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'c_index' in col]].values.flatten()
+
+    ax4.boxplot(scores_5, vert=True, patch_artist=True)
+    ax4.set_title("Distribuzione C-index sui fold")
+    ax4.set_ylabel("C-index")
+    ax4.grid(True, linestyle="--", alpha=0.5)
+
+    # -----------------------------------------------------------
+    # (E) MODELLO 5-LAYER → BRIER CURVES
+    # -----------------------------------------------------------
+    brier_scores_5 = best_res_5[
+        [col for col in best_res_5.columns if 'split' in col and 'brier_score' in col]].values.flatten()
+    ibs_folds_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'ibs' in col]].values.flatten()
+
     max_common = min(np.max(np.array(t)) for t in times_folds)
     min_common = max(np.min(np.array(t)) for t in times_folds)
     time_grid = np.linspace(min_common, max_common, 300)  # puoi cambiare risoluzione
     brier_interp = []
 
-    for times, bs in zip(times_folds, brier_scores):
-        # crea interpolatore lineare
-        f = interp1d(times, bs, kind='nearest', bounds_error=False, fill_value=np.nan)
-        # valutiamo sul time_grid
-        brier_interp.append(f(time_grid))
-
     # ---- IBS Statistics ----
-    ibs_mean = np.mean(ibs_folds)
-    ibs_std = np.std(ibs_folds)
-    ibs_min = np.min(ibs_folds)
-    ibs_max = np.max(ibs_folds)
-    ibs_p25 = np.percentile(ibs_folds, 25)
-    ibs_p50 = np.percentile(ibs_folds, 50)
-    ibs_p75 = np.percentile(ibs_folds, 75)
+    ibs_mean = np.mean(ibs_folds_5)
+    ibs_std = np.std(ibs_folds_5)
+    ibs_min = np.min(ibs_folds_5)
+    ibs_max = np.max(ibs_folds_5)
+    ibs_p25 = np.percentile(ibs_folds_5, 25)
+    ibs_p50 = np.percentile(ibs_folds_5, 50)
+    ibs_p75 = np.percentile(ibs_folds_5, 75)
 
-    plt.figure(figsize=(8, 6))
-    for i, bs in enumerate(brier_interp):
-        plt.plot(time_grid, bs, alpha=0.6, label=f"Fold {i}")
-    plt.title("Brier Score per Fold (ricampionate su griglia comune)\n\n"
-              f"IBS — Mean: {ibs_mean:.4f} | Std: {ibs_std:.4f} | "
-              f"Min: {ibs_min:.4f} | Max: {ibs_max:.4f} |\n"
-              f"P25: {ibs_p25:.4f} | Median: {ibs_p50:.4f} | P75: {ibs_p75:.4f}")
-    plt.xlabel("Tempo")
-    plt.ylabel("Brier Score")
-    plt.legend()
-    plt.grid(True, linestyle="--", alpha=0.4)
+    for i, (times, bs) in enumerate(zip(times_folds, brier_scores_5)):
+        f = interp1d(times, bs, kind='nearest', bounds_error=False, fill_value=np.nan)
+        ax5.plot(time_grid, f(time_grid), alpha=0.6, label=f"Fold {i}")
+
+    ax5.set_title("Brier Score per Fold (ricampionate su griglia comune)\n\n"
+                  f"IBS — Mean: {ibs_mean:.4f} | Std: {ibs_std:.4f} | "
+                  f"Min: {ibs_min:.4f} | Max: {ibs_max:.4f} |\n"
+                  f"P25: {ibs_p25:.4f} | Median: {ibs_p50:.4f} | P75: {ibs_p75:.4f}")
+    ax5.set_xlabel("Tempo")
+    ax5.set_ylabel("Brier Score")
+    ax5.legend()
+    ax5.grid(True, linestyle="--", alpha=0.4)
+
     plt.tight_layout()
     plt.show()
-
-
-def save_plots(final_model, pca_model, X_test_pca_gpu, y_test, dataset_name, network_name):
-    X_test_np = X_test_pca_gpu.cpu().numpy()
-    durations = y_test['duration'].values
-    events = y_test['event'].values
-
-    print(final_model.baseline_hazards_)
-    print(final_model.baseline_cumulative_hazards_)
-
-    # Predizione curve di sopravvivenza
-    surv = final_model.predict_surv_df(torch.tensor(X_test_np, dtype=torch.float32))
-
-    # Checks
-    print("Eventi nel test set:", np.unique(events, return_counts=True))
-    print("Durate min/max:", durations.min(), durations.max())
-    print("Surv shape:", surv.shape, "Surv nan:", np.isnan(surv.values).sum())
-
-    # EvalSurv
-    ev = EvalSurv(surv, durations, events, censor_surv="km")
-
-    time_grid = np.linspace(durations.min(), durations.max(), 100)
-    brier_scores = ev.brier_score(time_grid)
-
-    # Integrated Brier Score (IBS)
-    ibs = ev.integrated_brier_score(time_grid)
-    print(f"📉 IBS (Integrated Brier Score): {ibs:.4f}")
-
-    # ------------ Time-dependent ------------
-    cindex_global = ev.concordance_td()
-    print(f"📈 C-index (global): {cindex_global:.4f}")
-
-    # -------- PLOT FIGURE -------
-    plt.figure(figsize=(18, 14))
-
-    # 1. Survival curves
-    plt.subplot(2, 3, 1)
-    for i in range(min(30, surv.shape[1])):
-        plt.step(surv.index, surv.iloc[:, i], where="post", alpha=0.3)
-    plt.title("Survival curves (test set)")
-    plt.xlabel("Time")
-    plt.ylabel("Survival probability")
-
-    # 2. Training loss
-    if hasattr(final_model, "log"):
-        log = final_model.log
-        plt.subplot(2, 3, 2)
-        plt.plot(log.loss, label="train")
-        if hasattr(log, "val_loss"):
-            plt.plot(log.val_loss, label="valid")
-        plt.title("Training / Validation loss")
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.legend()
-
-    # 3. PCA variance
-    plt.subplot(2, 3, 3)
-    plt.plot(np.cumsum(pca_model.explained_variance_ratio_))
-    plt.title("PCA cumulative explained variance")
-    plt.xlabel("Components")
-    plt.ylabel("Cumulative variance")
-
-    # 4. Brier score vs time
-    plt.subplot(2, 3, 4)
-    plt.plot(time_grid, brier_scores)
-    plt.title(f"Brier score over time\nIBS = {ibs:.4f}")
-    plt.xlabel("Time")
-    plt.ylabel("Brier score")
-
-    # 5. C-index
-    plt.subplot(2, 3, 5)
-    plt.bar(["C-index"], [cindex_global])
-    plt.ylim(0, 1)
-    plt.title("Global C-index")
-
-    # 6. IBS (single bar)
-    plt.subplot(2, 3, 6)
-    plt.bar(["IBS"], [ibs])
-    plt.ylim(0, 1)
-    plt.title("Integrated Brier Score")
-
-    # ---- Save PNG ----
-    fig_path = os.path.join(
-        ROOT, "deepsurv_results", f"{dataset_name}__{network_name}.png"
-    )
-    os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(fig_path)
+    fig.savefig(plot_path)
     plt.close()
-
-    print(f"📊 Saved plot: {fig_path}")
+    print(f"📊 Saved plot: {plot_path}")
 
 
 def main():
@@ -410,12 +398,15 @@ def main():
 
         X, y = prepare_data(dataset)
         X = scale_data(X)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=SEED,
-                                                            stratify=y['event'])
-        X_train_gpu, y_train_gpu, X_test_gpu, y_test_gpu = data_to_gpu(X_train, y_train, X_test, y_test)
+        #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=SEED,
+        #                                                    stratify=y['event'])
 
         kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
-        fold_indexes = list(kfold.split(X_train, y_train['event']))
+        fold_indexes = list(kfold.split(X, y['event']))
+
+        X_pca, pca_model, new_feature_names = fit_transform_pca(X)
+        X_gpu, y_gpu = data_to_gpu(X_pca, y)
+        feature_names = X.columns
 
         # ---------------- 3 LAYERS ----------------
         """param_grid_3 = {
@@ -434,11 +425,10 @@ def main():
             'lr': [1e-2, 1e-3, 1e-4],
             'batch_size': [64]
         }
-
-        best_3, results_3 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, subtype, Net_3layers, param_grid_3, dataset_name)
+        best_3, results_3 = cross_validate(X_gpu, y_gpu, fold_indexes, subtype, Net_3layers, param_grid_3, dataset_name)
         best_res_3 = results_3[results_3['params'] == best_3['best_params']]
         times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
-        plots(best_res_3, times_csv_path)
+        save_model(best_3['best_model'], subtype, dataset_name, '3layers')
 
         # ---------------- 5 LAYERS ----------------
         """param_grid_5 = {
@@ -451,10 +441,14 @@ def main():
             'dropout': [0.3], 'lr': [0.01], 'batch_size': [32],
             'epochs': [200], 'weight_decay': [1e-6], 'lr_factor': [0.7]
         }
-        best_5, results_5 = cross_validate(X_train_gpu, y_train_gpu, fold_indexes, subtype, Net_5layers, param_grid_5,
+        best_5, results_5 = cross_validate(X_gpu, y_gpu, fold_indexes, subtype, Net_5layers, param_grid_5,
                                            dataset_name)
         best_res_5 = results_5[results_5['params'] == best_5['best_params']]
-        plots(best_res_5, times_csv_path)
+        save_model(best_3['best_model'], subtype, dataset_name, '3layers')
+
+        plot_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__summary.png")
+        os.makedirs(os.path.dirname(plot_path), exist_ok=True)
+        plots(best_res_3, best_res_5, pca_model, times_csv_path, feature_names, plot_path)
 
 
 if __name__ == "__main__":
