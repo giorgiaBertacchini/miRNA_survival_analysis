@@ -306,7 +306,8 @@ class WrappedNet(torch.nn.Module):
         return self.net(x).unsqueeze(1)
 
 
-def explanation(models, X_gpu, feature_names):
+def explanation(ax, models, X_gpu, feature_names):
+    print("Calculating SHAP values...")
     all_shap_values = []
     X_cpu = X_gpu.cpu().detach().float()
 
@@ -348,22 +349,29 @@ def explanation(models, X_gpu, feature_names):
     top_features = [str(feature_names[i]) for i in top_idx]
 
     # Plot
-    plt.figure(figsize=(10, 6))
+    """plt.figure(figsize=(10, 6))
     plt.barh(top_features[::-1], top_values[::-1], color='skyblue')
     plt.xlabel("Mean |SHAP value|")
     plt.title("Top Feature Importances (SHAP) - DeepSurv")
     plt.gca().invert_yaxis()
     plt.tight_layout()
-    plt.show()
+    plt.show()"""
+    ax.barh(top_features[::-1], top_values[::-1], color='skyblue')
+    ax.set_xlabel("Mean |SHAP value|")
+    ax.set_title("Top Feature Importances (SHAP) - DeepSurv")
+    ax.invert_yaxis()
 
 
 # ------------------- PLOTS -------------------
 def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_path, feature_names, plot_path):
-    fig, axes = plt.subplots(3, 2, figsize=(16, 20))
-    ax1, ax_empty, ax2, ax3, ax4, ax5 = axes.flatten()
+    fig, axes = plt.subplots(3, 3, figsize=(35, 35))
+    ax1, ax_empty, ax_empty_2, ax2, ax3, ax_explain_3, ax4, ax5, ax_explain_5 = axes.flatten()
 
     ax_empty.axis("off")
     ax_empty.set_title("")
+
+    ax_empty_2.axis("off")
+    ax_empty_2.set_title("")
 
     # -----------------------------------------------------------
     # (A) PCA FEATURE IMPORTANCE
@@ -382,13 +390,6 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     ax1.invert_yaxis()
 
     # -----------------------------------------------------------
-    # () SHAP values
-    # -----------------------------------------------------------
-    # TODO
-    #explanation(models_3, X, feature_names)
-    #explanation(models_5, X, feature_names)
-
-    # -----------------------------------------------------------
     # CARICAMENTO TIMES UNA SOLA VOLTA
     # -----------------------------------------------------------
     df_times = pd.read_csv(times_csv_path)
@@ -404,7 +405,6 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (B) MODELLO 3-LAYER → BOX C-INDEX
     # -----------------------------------------------------------
-    #scores_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'c_index' in col]].values.flatten()
     scores_3 = best_res_3["c_index"].values
 
     ax2.boxplot(scores_3, vert=True, patch_artist=True)
@@ -415,9 +415,6 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (C) MODELLO 3-LAYER → BRIER CURVES
     # -----------------------------------------------------------
-    #brier_scores_3 = best_res_3[
-    #    [col for col in best_res_3.columns if 'split' in col and 'brier_score' in col]].values.flatten()
-    #ibs_folds_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'ibs' in col]].values.flatten()
     brier_scores_3 = best_res_3["brier_score"].values
     ibs_folds_3 = best_res_3["ibs"].values
 
@@ -446,10 +443,15 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     ax3.legend()
     ax3.grid(True, linestyle="--", alpha=0.4)
 
+
+    # -----------------------------------------------------------
+    # () SHAP values
+    # -----------------------------------------------------------
+    explanation(ax_explain_3, models_3, X, feature_names)
+
     # -----------------------------------------------------------
     # (D) MODELLO 5-LAYER → BOX C-INDEX
     # -----------------------------------------------------------
-    #scores_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'c_index' in col]].values.flatten()
     scores_5 = best_res_5["c_index"].values
 
     ax4.boxplot(scores_5, vert=True, patch_artist=True)
@@ -460,9 +462,6 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (E) MODELLO 5-LAYER → BRIER CURVES
     # -----------------------------------------------------------
-    #brier_scores_5 = best_res_5[
-    #    [col for col in best_res_5.columns if 'split' in col and 'brier_score' in col]].values.flatten()
-    #ibs_folds_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'ibs' in col]].values.flatten()
     brier_scores_5 = best_res_5["brier_score"].values
     ibs_folds_5 = best_res_5["ibs"].values
 
@@ -487,6 +486,11 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     ax5.set_ylabel("Brier Score")
     ax5.legend()
     ax5.grid(True, linestyle="--", alpha=0.4)
+
+    # -----------------------------------------------------------
+    # () SHAP values
+    # -----------------------------------------------------------
+    explanation(ax_explain_5, models_5, X, feature_names)
 
     plt.tight_layout()
     plt.show()
