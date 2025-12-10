@@ -8,6 +8,7 @@ import operator
 import pandas as pd
 import torch
 import shap
+import json
 import torchtuples as tt
 from pycox.models import CoxPH
 from pycox.evaluation import EvalSurv
@@ -198,10 +199,9 @@ def grid_searches(X, y, fold_indexes, subtype, network_class, param_grid, datase
         os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'gcv_results_{net_name}.csv'),
         index=False)
 
-    best_result = pd.DataFrame(best_result)
-    best_result.to_csv(
-        os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'gcv_best_results_{net_name}.csv'),
-        index=False)
+    best_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'gcv_best_results_{net_name}.json')
+    with open(best_path, "w", encoding="utf-8") as f:
+        json.dump(best_result, f, indent=4)
 
     return best_result, results
 
@@ -213,7 +213,12 @@ def cross_validate(X, y, fold_indexes, params, network_class, subtype, dataset_n
     times_folds = []
     ibs_scores = []
     models = []
-    saved_times_csv = False
+
+    to_int = {"batch_size", "epochs", "hidden1", "hidden2", "hidden3", "hidden4"}
+    params = {
+        k: int(v) if k in to_int else v
+        for k, v in params.items()
+    }
 
     for train_idx, val_idx in fold_indexes:
         X_train_fold = X[train_idx]
@@ -251,27 +256,23 @@ def cross_validate(X, y, fold_indexes, params, network_class, subtype, dataset_n
         # Save model
         models.append(model)
 
-    if not saved_times_csv:
-        times_dict = {f"times_fold{i + 1}": [times_folds[i]] for i in range(len(times_folds))}
-        df_times = pd.DataFrame(times_dict)
-        save_dir = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name)
-        os.makedirs(save_dir, exist_ok=True)
-        df_times.to_csv(os.path.join(save_dir, "times_by_fold.csv"), index=False)
-        saved_times_csv = True
+    # Save times
+    times_dict = {f"times_fold{i + 1}": [times_folds[i]] for i in range(len(times_folds))}
+    df_times = pd.DataFrame(times_dict)
 
-    fold_result = {
-        'params': params,
-    }
-
+    rows = []
     for f in range(len(cindex_scores)):
-        fold_result[f"split{f}_c_index"] = cindex_scores[f]
-        fold_result[f"split{f}_brier_score"] = brier_scores[f]
-        fold_result[f"split{f}_ibs"] = ibs_scores[f]
+        rows.append({
+            "split": f,
+            "c_index": cindex_scores[f],
+            "brier_score": list(brier_scores[f]),
+            "ibs": ibs_scores[f]
+        })
 
     # Save results
-    fold_result = pd.DataFrame(fold_result)
+    fold_result = pd.DataFrame(rows)
     fold_result.to_csv(
-        os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, 'cv_results_Net_3layers.csv'),
+        os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'cv_results_{network_class.__name__}.csv'),
         index=False)
 
     df_times.to_csv(os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv"),
@@ -384,8 +385,8 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # () SHAP values
     # -----------------------------------------------------------
     # TODO
-    explanation(models_3, X, feature_names)
-    explanation(models_5, X, feature_names)
+    #explanation(models_3, X, feature_names)
+    #explanation(models_5, X, feature_names)
 
     # -----------------------------------------------------------
     # CARICAMENTO TIMES UNA SOLA VOLTA
@@ -403,7 +404,8 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (B) MODELLO 3-LAYER → BOX C-INDEX
     # -----------------------------------------------------------
-    scores_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'c_index' in col]].values.flatten()
+    #scores_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'c_index' in col]].values.flatten()
+    scores_3 = best_res_3["c_index"].values
 
     ax2.boxplot(scores_3, vert=True, patch_artist=True)
     ax2.set_title("Distribuzione C-index sui fold")
@@ -413,9 +415,11 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (C) MODELLO 3-LAYER → BRIER CURVES
     # -----------------------------------------------------------
-    brier_scores_3 = best_res_3[
-        [col for col in best_res_3.columns if 'split' in col and 'brier_score' in col]].values.flatten()
-    ibs_folds_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'ibs' in col]].values.flatten()
+    #brier_scores_3 = best_res_3[
+    #    [col for col in best_res_3.columns if 'split' in col and 'brier_score' in col]].values.flatten()
+    #ibs_folds_3 = best_res_3[[col for col in best_res_3.columns if 'split' in col and 'ibs' in col]].values.flatten()
+    brier_scores_3 = best_res_3["brier_score"].values
+    ibs_folds_3 = best_res_3["ibs"].values
 
     max_common = min(np.max(np.array(t)) for t in times_folds)
     min_common = max(np.min(np.array(t)) for t in times_folds)
@@ -445,7 +449,8 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (D) MODELLO 5-LAYER → BOX C-INDEX
     # -----------------------------------------------------------
-    scores_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'c_index' in col]].values.flatten()
+    #scores_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'c_index' in col]].values.flatten()
+    scores_5 = best_res_5["c_index"].values
 
     ax4.boxplot(scores_5, vert=True, patch_artist=True)
     ax4.set_title("Distribuzione C-index sui fold")
@@ -455,9 +460,11 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     # -----------------------------------------------------------
     # (E) MODELLO 5-LAYER → BRIER CURVES
     # -----------------------------------------------------------
-    brier_scores_5 = best_res_5[
-        [col for col in best_res_5.columns if 'split' in col and 'brier_score' in col]].values.flatten()
-    ibs_folds_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'ibs' in col]].values.flatten()
+    #brier_scores_5 = best_res_5[
+    #    [col for col in best_res_5.columns if 'split' in col and 'brier_score' in col]].values.flatten()
+    #ibs_folds_5 = best_res_5[[col for col in best_res_5.columns if 'split' in col and 'ibs' in col]].values.flatten()
+    brier_scores_5 = best_res_5["brier_score"].values
+    ibs_folds_5 = best_res_5["ibs"].values
 
     # ---- IBS Statistics ----
     ibs_mean = np.mean(ibs_folds_5)
@@ -571,12 +578,11 @@ def main():
 
         print("Grid search for best params...")
         gcv_best_5, gcv_results_5 = grid_searches(X_pca_gpu, y_pca_gpu, fold_indexes, subtype, Net_5layers,
-                                                  param_grid_3, dataset_name)
-        # best_res_3 = gcv_results_3[gcv_results_3['params'] == gcv_best_3['best_params']]
+                                                  param_grid_5, dataset_name)
 
         print("Cross validation on best params...")
-        models_5, cv_results_5, _ = cross_validate(X_pca_gpu, y_pca_gpu, fold_indexes, gcv_best_3['best_params'],
-                                                   Net_3layers, subtype, dataset_name)
+        models_5, cv_results_5, _ = cross_validate(X_pca_gpu, y_pca_gpu, fold_indexes, gcv_best_5['best_params'],
+                                                   Net_5layers, subtype, dataset_name)
 
         # Plots
         plot_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__summary.png")

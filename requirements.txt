@@ -12,3 +12,4 @@ scikit-survival
 pycox
 lifelines
 sklearn-pandas
+shap
