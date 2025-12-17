@@ -50,8 +50,8 @@ base = os.path.basename(os.getcwd())
 list_path = os.getcwd().split(os.sep)
 list_path.pop()
 # list.pop(list.index(base))
-ROOT = '\\'.join(list_path)
-#ROOT = os.path.dirname(os.getcwd()) + "/mbulgarelli"
+# ROOT = '\\'.join(list_path)
+ROOT = os.path.dirname(os.getcwd()) + "/mbulgarelli"
 DATA_PATH = os.path.join(ROOT, 'datasets/preprocessed')
 
 
@@ -199,7 +199,8 @@ def grid_searches(X, y, fold_indexes, subtype, network_class, param_grid, datase
         os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'gcv_results_{net_name}.csv'),
         index=False)
 
-    best_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'gcv_best_results_{net_name}.json')
+    best_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name,
+                             f'gcv_best_results_{net_name}.json')
     with open(best_path, "w", encoding="utf-8") as f:
         json.dump(best_result, f, indent=4)
 
@@ -272,7 +273,8 @@ def cross_validate(X, y, fold_indexes, params, network_class, subtype, dataset_n
     # Save results
     fold_result = pd.DataFrame(rows)
     fold_result.to_csv(
-        os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'cv_results_{network_class.__name__}.csv'),
+        os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name,
+                     f'cv_results_{network_class.__name__}.csv'),
         index=False)
 
     df_times.to_csv(os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv"),
@@ -334,6 +336,21 @@ def explanation(ax, models, X_gpu, feature_names):
     plt.tight_layout()
     plt.show()"""
 
+    # Salviamo tutti i valori SHAP e calcoliamo la media pesata
+    n_models, n_samples, n_features = all_shap_values.shape
+    rows = []
+    for m_idx in range(n_models):
+        for s_idx in range(n_samples):
+            for f_idx in range(n_features):
+                rows.append({
+                    "model_id": m_idx,
+                    "sample_id": s_idx,
+                    "feature": feature_names[f_idx],
+                    "shap_value": all_shap_values[m_idx, s_idx, f_idx]
+                })
+    df_shap = pd.DataFrame(rows)
+    df_shap.to_csv("shap_values_all_models.csv", index=False)
+
     # Convertiamo in array e calcoliamo media pesata
     all_shap_values = np.array(all_shap_values)  # shape: (n_models, n_samples, n_features)
     mean_shap_across_models = np.tensordot(weights, all_shap_values, axes=(0, 0))  # shape: (n_samples, n_features)
@@ -348,14 +365,7 @@ def explanation(ax, models, X_gpu, feature_names):
     top_values = mean_abs_shap[top_idx]
     top_features = [str(feature_names[i]) for i in top_idx]
 
-    # Plot
-    """plt.figure(figsize=(10, 6))
-    plt.barh(top_features[::-1], top_values[::-1], color='skyblue')
-    plt.xlabel("Mean |SHAP value|")
-    plt.title("Top Feature Importances (SHAP) - DeepSurv")
-    plt.gca().invert_yaxis()
-    plt.tight_layout()
-    plt.show()"""
+    # Plot   
     ax.barh(top_features[::-1], top_values[::-1], color='skyblue')
     ax.set_xlabel("Mean |SHAP value|")
     ax.set_title("Top Feature Importances (SHAP) - DeepSurv")
@@ -363,19 +373,10 @@ def explanation(ax, models, X_gpu, feature_names):
 
 
 # ------------------- PLOTS -------------------
-def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_path, feature_names, plot_path):
-    fig, axes = plt.subplots(3, 3, figsize=(35, 35))
-    ax1, ax_empty, ax_empty_2, ax2, ax3, ax_explain_3, ax4, ax5, ax_explain_5 = axes.flatten()
-
-    ax_empty.axis("off")
-    ax_empty.set_title("")
-
-    ax_empty_2.axis("off")
-    ax_empty_2.set_title("")
-
+def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_path, feature_names, results_dir):
     # -----------------------------------------------------------
     # (A) PCA FEATURE IMPORTANCE
-    # -----------------------------------------------------------
+    # -----------------------------------------------------------                                    
     loadings = pca_model.components_.T * np.sqrt(pca_model.explained_variance_)
     pc1_importances = np.abs(loadings[:, 0])
 
@@ -384,10 +385,18 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     top_features = np.array(feature_names)[idx_top]
     top_values = pc1_importances[idx_top]
 
-    ax1.barh(top_features, top_values)
-    ax1.set_title("Top PCA Feature Importances (PC1)")
-    ax1.set_xlabel("Loading |PC1|")
-    ax1.invert_yaxis()
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    ax.barh(top_features, top_values)
+    ax.set_title("Top PCA Feature Importances (PC1)")
+    ax.set_xlabel("Loading |PC1|")
+    ax.invert_yaxis()
+
+    plt.tight_layout()
+    plt.show()
+    fig.savefig(results_dir + "/pca_feature_importances.png")
+    plt.close()
+    print(f"📊 Saved plot: {results_dir}/pca_feature_importances.png")
 
     # -----------------------------------------------------------
     # CARICAMENTO TIMES UNA SOLA VOLTA
@@ -403,17 +412,24 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
         times_folds.append(cleaned_list)
 
     # -----------------------------------------------------------
-    # (B) MODELLO 3-LAYER → BOX C-INDEX
+    # (B) MODELLO 3-LAYER
+    # -----------------------------------------------------------
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    ax1, ax2, ax_explain_3 = axes.flatten()
+
+    # -----------------------------------------------------------
+    # (B.1) MODELLO 3-LAYER → BOX C-INDEX
     # -----------------------------------------------------------
     scores_3 = best_res_3["c_index"].values
 
-    ax2.boxplot(scores_3, vert=True, patch_artist=True)
-    ax2.set_title("Distribuzione C-index sui fold")
-    ax2.set_ylabel("C-index")
-    ax2.grid(True, linestyle="--", alpha=0.5)
+    ax1.boxplot(scores_3, vert=True, patch_artist=True)
+    ax1.set_title("Distribuzione C-index sui fold")
+    ax1.set_ylabel("C-index")
+    ax1.grid(True, linestyle="--", alpha=0.5)
 
     # -----------------------------------------------------------
-    # (C) MODELLO 3-LAYER → BRIER CURVES
+    # (B.2) MODELLO 3-LAYER → BRIER CURVES
     # -----------------------------------------------------------
     brier_scores_3 = best_res_3["brier_score"].values
     ibs_folds_3 = best_res_3["ibs"].values
@@ -432,25 +448,37 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
 
     for i, (times, bs) in enumerate(zip(times_folds, brier_scores_3)):
         f = interp1d(times, bs, kind='nearest', bounds_error=False, fill_value=np.nan)
-        ax3.plot(time_grid, f(time_grid), alpha=0.6, label=f"Fold {i}")
+        ax2.plot(time_grid, f(time_grid), alpha=0.6, label=f"Fold {i}")
 
-    ax3.set_title("Brier Score per Fold (ricampionate su griglia comune)\n\n"
+    ax2.set_title("Brier Score per Fold (ricampionate su griglia comune)\n\n"
                   f"IBS — Mean: {ibs_mean:.4f} | Std: {ibs_std:.4f} | "
                   f"Min: {ibs_min:.4f} | Max: {ibs_max:.4f} |\n"
                   f"P25: {ibs_p25:.4f} | Median: {ibs_p50:.4f} | P75: {ibs_p75:.4f}")
-    ax3.set_xlabel("Tempo")
-    ax3.set_ylabel("Brier Score")
-    ax3.legend()
-    ax3.grid(True, linestyle="--", alpha=0.4)
-
-
-    # -----------------------------------------------------------
-    # () SHAP values
-    # -----------------------------------------------------------
-    explanation(ax_explain_3, models_3, X, feature_names)
+    ax2.set_xlabel("Tempo")
+    ax2.set_ylabel("Brier Score")
+    ax2.legend()
+    ax2.grid(True, linestyle="--", alpha=0.4)
 
     # -----------------------------------------------------------
-    # (D) MODELLO 5-LAYER → BOX C-INDEX
+    # (B.3) MODELLO 3-LAYER → SHAP values
+    # -----------------------------------------------------------
+    explanation(ax_explain_3, models_3, X, feature_names, results_dir + "/shap_values_3layers.csv")
+
+    plt.tight_layout()
+    plt.show()
+    fig.savefig(results_dir + "/results_3layers.png")
+    plt.close()
+    print(f"📊 Saved plot: {results_dir}/results_3layers.png")
+
+    # -----------------------------------------------------------
+    # (C) MODELLO 5-LAYER
+    # -----------------------------------------------------------
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    ax4, ax5, ax_explain_5 = axes.flatten()
+
+    # -----------------------------------------------------------
+    # (C.1) MODELLO 5-LAYER → BOX C-INDEX
     # -----------------------------------------------------------
     scores_5 = best_res_5["c_index"].values
 
@@ -460,7 +488,7 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     ax4.grid(True, linestyle="--", alpha=0.5)
 
     # -----------------------------------------------------------
-    # (E) MODELLO 5-LAYER → BRIER CURVES
+    # (C.2) MODELLO 5-LAYER → BRIER CURVES
     # -----------------------------------------------------------
     brier_scores_5 = best_res_5["brier_score"].values
     ibs_folds_5 = best_res_5["ibs"].values
@@ -488,15 +516,15 @@ def plots(models_3, best_res_3, models_5, best_res_5, pca_model, X, times_csv_pa
     ax5.grid(True, linestyle="--", alpha=0.4)
 
     # -----------------------------------------------------------
-    # () SHAP values
+    # (C.3) MODELLO 5-LAYER → SHAP values
     # -----------------------------------------------------------
-    explanation(ax_explain_5, models_5, X, feature_names)
+    explanation(ax_explain_5, models_5, X, feature_names, results_dir + "/shap_values_5layers.csv")
 
     plt.tight_layout()
     plt.show()
-    fig.savefig(plot_path)
+    fig.savefig(results_dir + "/results_5layers.png")
     plt.close()
-    print(f"📊 Saved plot: {plot_path}")
+    print(f"📊 Saved plot: {results_dir}/results_5layers.png")
 
 
 def main():
@@ -589,11 +617,11 @@ def main():
                                                    Net_5layers, subtype, dataset_name)
 
         # Plots
-        plot_path = os.path.join(ROOT, 'deepsurv_results', subtype, f"{dataset_name}__summary.png")
-        os.makedirs(os.path.dirname(plot_path), exist_ok=True)
+        results_dir = os.path.join(ROOT, 'deepsurv_results', subtype)
+        os.makedirs(os.path.dirname(results_dir), exist_ok=True)
         times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
         plots(models_3, cv_results_3, models_5, cv_results_5, pca_model, X_pca_gpu, times_csv_path, feature_names,
-              plot_path)
+              results_dir)
 
 
 if __name__ == "__main__":
