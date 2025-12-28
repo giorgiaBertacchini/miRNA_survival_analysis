@@ -1,0 +1,14 @@
+{
+  "latent_dim": 50,
+  "vae_hidden_dims": [
+    512,
+    128
+  ],
+  "cox_hidden_dims": [
+    64,
+    32
+  ],
+  "lambda_vae": 0.5,
+  "learning_rate": 0.0001,
+  "batch_size": 32
+}

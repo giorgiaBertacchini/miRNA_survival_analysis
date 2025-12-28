@@ -468,8 +468,8 @@ def plot_brier_scores(ax, scores):
 
 def main():
     datasets = [
-        'miRNA\\clinical_miRNA_normalized_log.csv', 
-        # 'miRNA/clinical_miRNA_normalized_quant.csv',
+        # 'miRNA\\clinical_miRNA_normalized_log.csv', 
+        'miRNA/clinical_miRNA_normalized_quant.csv',
         # 'mRNA/clinical_mRNA_normalized_log.csv', 
         # 'mRNA/clinical_mRNA_normalized_tpm_log.csv'
     ]
