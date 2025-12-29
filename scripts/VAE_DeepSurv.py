@@ -215,7 +215,7 @@ class VAECoxLoss(nn.Module):
     
 def main():
     datasets = [
-        # 'miRNA\\clinical_miRNA_normalized_log.csv', 
+        'miRNA\\clinical_miRNA_normalized_log.csv', 
         'miRNA\\clinical_miRNA_normalized_quant.csv',
         'mRNA\\clinical_mRNA_normalized_log.csv', 
         'mRNA\\clinical_mRNA_normalized_tpm_log.csv'
@@ -466,7 +466,7 @@ def main():
             z = z.cpu().numpy()
             clinical_data = X[clin_cols].reset_index(drop=True)
             embeddings_df = pd.DataFrame(z, columns=[f"VAE_{i}" for i in range(z.shape[1])])
-            final_df = pd.concat([embeddings_df, clinical_data], axis=1)
+            final_df = pd.concat([embeddings_df, clinical_data, dataset[['Death', 'days_to_death', 'days_to_last_followup']]], axis=1)
             fname = os.path.join(ROOT, f"datasets/preprocessed/{SUBTYPE}/VAE_{DATASET_TYPE}.csv")
             final_df.to_csv(fname, index=False)
             print(f"VAE embeddings with clinical data saved to {fname}")
