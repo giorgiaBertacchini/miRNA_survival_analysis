@@ -9,6 +9,8 @@ from torch.utils.data import TensorDataset, DataLoader
 import itertools
 import json
 import os
+from sklearn.model_selection import train_test_split
+from sksurv.metrics import concordance_index_censored
 
 # Set the device to GPU if available, otherwise CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -213,17 +215,17 @@ class VAECoxLoss(nn.Module):
     
 def main():
     datasets = [
-        'miRNA\\clinical_miRNA_normalized_log.csv', 
-        # 'miRNA/clinical_miRNA_normalized_quant.csv',
-        # 'mRNA/clinical_mRNA_normalized_log.csv', 
-        # 'mRNA/clinical_mRNA_normalized_tpm_log.csv'
+        # 'miRNA\\clinical_miRNA_normalized_log.csv', 
+        'miRNA\\clinical_miRNA_normalized_quant.csv',
+        'mRNA\\clinical_mRNA_normalized_log.csv', 
+        'mRNA\\clinical_mRNA_normalized_tpm_log.csv'
     ]
 
-    latent_dims = [20, 50]
+    latent_dims = [50]
     vae_hidden_dims_list = [[256, 64], [512, 128]]
     cox_hidden_dims_list = [[32, 16], [64, 32]]
-    lambda_vaes = [1.0] #, 0.8, 0.5] # [0.001, 0.005, 0.01]
-    learning_rates = [1e-4, 5e-5]
+    lambda_vaes = [0.7] #, 0.8, 0.5] # [0.001, 0.005, 0.01]
+    learning_rates = [1e-3, 5e-4, 1e-4]
     batch_sizes = [32, 64, 128]
 
     grid = list(itertools.product(latent_dims, vae_hidden_dims_list, cox_hidden_dims_list, lambda_vaes, learning_rates, batch_sizes))
@@ -239,6 +241,8 @@ def main():
         X, y = prepare_data(dataset, USE_CLINICAL)
         X = scale_data(X)
 
+        train_idx, val_idx = train_test_split(np.arange(len(X)), test_size=0.2, random_state=42)
+
         gene_cols = [col for col in X.columns if 'gene.' in col or 'hsa' in col]
         clin_cols = [col for col in X.columns if col not in gene_cols]
         GENE_DIM = len(gene_cols)
@@ -253,10 +257,16 @@ def main():
         time_tensor = torch.tensor(y['time'].copy(), dtype=torch.float32)
         event_tensor = torch.tensor(y['event'].copy(), dtype=torch.bool)
 
+        X_gene_train, X_clin_train = X_gene_tensor[train_idx], X_clin_tensor[train_idx]
+        time_train, event_train = time_tensor[train_idx], event_tensor[train_idx]
+        X_gene_val, X_clin_val = X_gene_tensor[val_idx], X_clin_tensor[val_idx]
+        time_val, event_val = time_tensor[val_idx], event_tensor[val_idx]
+
         params_dir = f"grid_searches/vae/{SUBTYPE}/{DATASET_TYPE}"
         os.makedirs(params_dir, exist_ok=True)
         params_path = f"{params_dir}/best_params.json"
 
+        best_c_index = -1.0
         best_params = None
         best_model_state = None
 
@@ -273,7 +283,7 @@ def main():
             BATCH_SIZE = best_params["batch_size"]
         else:
             best_val_loss = float('inf')
-            best_scale_diff = float('inf')
+
             for LATENT_DIM, VAE_HIDDEN_DIMS, COX_HIDDEN_DIMS, LAMBDA_VAE, LEARNING_RATE, BATCH_SIZE in grid:
                 print(f"\nGrid Search: latent_dim={LATENT_DIM}, vae_hidden={VAE_HIDDEN_DIMS}, cox_hidden={COX_HIDDEN_DIMS}, "
                       f"lambda_vae={LAMBDA_VAE}, lr={LEARNING_RATE}, batch_size={BATCH_SIZE}")
@@ -282,10 +292,12 @@ def main():
                 criterion = VAECoxLoss(lambda_vae=LAMBDA_VAE)
                 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-                dataset_torch = TensorDataset(X_gene_tensor, X_clin_tensor, time_tensor, event_tensor)
-                dataloader = DataLoader(dataset_torch, batch_size=BATCH_SIZE, shuffle=True)
+                train_data = TensorDataset(X_gene_train, X_clin_train, time_train, event_train)
+                dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+                # dataset_torch = TensorDataset(X_gene_tensor, X_clin_tensor, time_tensor, event_tensor)
+                # dataloader = DataLoader(dataset_torch, batch_size=BATCH_SIZE, shuffle=True)
 
-                EPOCHS = 30  # Reduce for grid search speed
+                EPOCHS = 30  # Reduced for grid search speed
 
                 cox_losses = []
                 vae_losses = []
@@ -297,7 +309,7 @@ def main():
                     epoch_cox_loss = 0
                     epoch_vae_loss = 0
                     num_batches = 0
-                    beta = min(1.0, epoch / (EPOCHS))
+                    beta = min(1.0, epoch / (EPOCHS//2))
                     for X_gene_batch, X_clin_batch, time_batch, event_batch in dataloader:
                         sorted_idx = torch.argsort(time_batch, descending=True)
                         X_gene_batch = X_gene_batch[sorted_idx].to(device)
@@ -311,7 +323,10 @@ def main():
                             log_h, X_gene_batch, x_rec, mu, logvar, time_batch, event_batch, beta_kl=beta
                         )
                         total_loss.backward()
+                        # Gradient clipping prevents the Cox loss from exploding the weights
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                         optimizer.step()
+
                         epoch_loss += total_loss.item()
                         epoch_cox_loss += cox_loss.item()
                         epoch_vae_loss += vae_loss.item()
@@ -322,18 +337,37 @@ def main():
 
                 # Compute the mean log10 scale difference between cox and vae losses over all epochs
                 # (lower is better, 0 means same order of magnitude)
-                scale_diffs = [abs(np.log10(abs(c)+1e-8) - np.log10(abs(v)+1e-8)) for c, v in zip(cox_losses, vae_losses)]
-                mean_scale_diff = np.mean(scale_diffs)
-                final_total_loss = total_losses[-1]
+                model.eval()
+                with torch.no_grad():
+                    # Get predictions on validation set
+                    # Ensure validation data is on the correct device
+                    val_x_g = X_gene_val.to(device)
+                    val_x_c = X_clin_val.to(device)
+                    val_t = time_val.to(device)
+                    val_e = event_val.to(device)
 
-                print(f"Mean log10 scale diff (Cox vs VAE): {mean_scale_diff:.3f}, Final total loss: {final_total_loss:.3f}")
+                    val_log_h, val_rec, val_mu, val_logvar = model(val_x_g, val_x_c)
+                    
+                    # 1. Calculate Validation Losses using the VAECoxLoss criterion
+                    # Use beta_kl=1.0 for evaluation to get the full ELBO/Total Loss
+                    val_total_loss, val_cox, val_vae = criterion(
+                        val_log_h, val_x_g, val_rec, val_mu, val_logvar, val_t, val_e, beta_kl=beta
+                    )
+                    
+                    val_total_loss = val_total_loss.item()
+                    val_cox = val_cox.item()
+                    val_vae = val_vae.item()
 
-                # Select best: prioritize lowest scale diff, then lowest total loss
-                if (mean_scale_diff < 0.5 and final_total_loss < best_val_loss) or \
-                   (mean_scale_diff < best_scale_diff) or \
-                   (mean_scale_diff == best_scale_diff and final_total_loss < best_val_loss):
-                    best_val_loss = final_total_loss
-                    best_scale_diff = mean_scale_diff
+                    # 2. (Optional) Still calculate C-Index and MSE for monitoring
+                    val_c_index = concordance_index_censored(event_val.numpy(), time_val.numpy(), -val_log_h.cpu().numpy())[0]
+                    val_mse = F.mse_loss(val_rec, val_x_g).item()
+
+                print(f"Val Total Loss: {val_total_loss:.4f} (Cox: {val_cox:.4f}, VAE: {val_vae:.4f}) | C-Index: {val_c_index:.4f} | MSE: {val_mse:.4f}")
+
+                # --- SELECTION CRITERION: MINIMIZE TOTAL VALIDATION LOSS ---
+                # This selects the model that best balances reconstruction and survival prediction
+                if val_total_loss < best_val_loss:
+                    best_val_loss = val_total_loss
                     best_params = {
                         "latent_dim": LATENT_DIM,
                         "vae_hidden_dims": VAE_HIDDEN_DIMS,
@@ -342,7 +376,29 @@ def main():
                         "learning_rate": LEARNING_RATE,
                         "batch_size": BATCH_SIZE
                     }
-                    best_model_state = model.state_dict()
+                            
+                # WORKING: Select best params based on loss scale difference and value
+                # scale_diffs = [abs(np.log10(abs(c)+1e-8) - np.log10(abs(v)+1e-8)) for c, v in zip(cox_losses, vae_losses)]
+                # mean_scale_diff = np.mean(scale_diffs)
+                # final_total_loss = total_losses[-1]
+
+                # print(f"Mean log10 scale diff (Cox vs VAE): {mean_scale_diff:.3f}, Final total loss: {final_total_loss:.3f}")
+
+                # # Select best: prioritize lowest scale diff, then lowest total loss
+                # if (mean_scale_diff < 0.5 and final_total_loss < best_val_loss) or \
+                #    (mean_scale_diff < best_scale_diff) or \
+                #    (mean_scale_diff == best_scale_diff and final_total_loss < best_val_loss):
+                #     best_val_loss = final_total_loss
+                #     best_scale_diff = mean_scale_diff
+                #     best_params = {
+                #         "latent_dim": LATENT_DIM,
+                #         "vae_hidden_dims": VAE_HIDDEN_DIMS,
+                #         "cox_hidden_dims": COX_HIDDEN_DIMS,
+                #         "lambda_vae": LAMBDA_VAE,
+                #         "learning_rate": LEARNING_RATE,
+                #         "batch_size": BATCH_SIZE
+                #     }
+                #     best_model_state = model.state_dict()
 
             # Save best parameters
             with open(params_path, "w") as f:
@@ -352,7 +408,7 @@ def main():
         # --- Retrain and Save VAE Embeddings with Best Parameters ---
         print(f"\nBest parameters: latent_dim={best_params['latent_dim']}, vae_hidden={best_params['vae_hidden_dims']}, "
               f"cox_hidden={best_params['cox_hidden_dims']}, lambda_vae={best_params['lambda_vae']}, "
-              f"lr={best_params['learning_rate']}, batch_size={best_params['batch_size']}")
+              f"lr={best_params['learning_rate']}, batch_size={best_params['batch_size']}, C-Index={best_c_index:.4f}")
         print(f"Retraining VAE with best parameters to save final dataset...")
 
         LATENT_DIM = best_params["latent_dim"]
@@ -369,14 +425,14 @@ def main():
         dataset_torch = TensorDataset(X_gene_tensor, X_clin_tensor, time_tensor, event_tensor)
         dataloader = DataLoader(dataset_torch, batch_size=BATCH_SIZE, shuffle=True)
 
-        EPOCHS = 50
+        EPOCHS = 100 # big for final training
         for epoch in range(EPOCHS):
             model.train()
             epoch_loss = 0
             epoch_cox_loss = 0
             epoch_vae_loss = 0
             num_batches = 0
-            beta = min(1.0, epoch / (EPOCHS))
+            beta = min(1.0, epoch / (EPOCHS // 2))
             for X_gene_batch, X_clin_batch, time_batch, event_batch in dataloader:
                 sorted_idx = torch.argsort(time_batch, descending=True)
                 X_gene_batch = X_gene_batch[sorted_idx].to(device)
@@ -411,7 +467,7 @@ def main():
             clinical_data = X[clin_cols].reset_index(drop=True)
             embeddings_df = pd.DataFrame(z, columns=[f"VAE_{i}" for i in range(z.shape[1])])
             final_df = pd.concat([embeddings_df, clinical_data], axis=1)
-            fname = f"datasets/preprocessed/{SUBTYPE}/VAE_{DATASET_TYPE}.csv"
+            fname = os.path.join(ROOT, f"datasets/preprocessed/{SUBTYPE}/VAE_{DATASET_TYPE}.csv")
             final_df.to_csv(fname, index=False)
             print(f"VAE embeddings with clinical data saved to {fname}")
 
