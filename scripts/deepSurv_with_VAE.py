@@ -12,9 +12,9 @@ import json
 import torchtuples as tt
 from pycox.models import CoxPH
 from pycox.evaluation import EvalSurv
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split, StratifiedKFold, ParameterGrid
+from sklearn.model_selection import StratifiedKFold, ParameterGrid
 import matplotlib.pyplot as plt
+import torch.optim as optim
 
 from networks import Net_3layers, Net_5layers
 
@@ -53,10 +53,10 @@ torch.use_deterministic_algorithms(True)
 # Paths
 base = os.path.basename(os.getcwd())
 list_path = os.getcwd().split(os.sep)
-# list_path.pop()
+list_path.pop()
 # list.pop(list.index(base))
 ROOT = '\\'.join(list_path)
-# ROOT = os.path.dirname(os.getcwd()) + "/mbulgarelli"
+#ROOT = os.path.dirname(os.getcwd()) + "/mbulgarelli"
 DATA_PATH = os.path.join(ROOT, 'datasets/preprocessed')
 
 
@@ -110,8 +110,10 @@ def create_model(X, params, network_class):
     else:
         net = Net_5layers(in_features, 1, params['hidden1'], params['hidden2'], params['hidden3'],
                           params['hidden4'], params['dropout'])
+    optimizer = optim.Adam(net.parameters(), lr=params['lr'], weight_decay=params.get('weight_decay', 1e-4))
+
     model = CoxPH(net, tt.optim.Adam)
-    model.optimizer.set_lr(params['lr'])
+    model.optimizer = optimizer
 
     return model
 
@@ -168,7 +170,7 @@ def grid_searches(X_train_folds, X_val_folds, y, fold_indexes, subtype, network_
             model.fit(X_train_fold, y_train_fold,
                       batch_size=params['batch_size'], epochs=params['epochs'],
                       callbacks=[
-                          tt.callbacks.EarlyStopping(patience=25),
+                          tt.callbacks.EarlyStopping(patience=50),
                           lr_decay_cb,
                           # LrLogger()
                       ],
@@ -199,6 +201,8 @@ def grid_searches(X_train_folds, X_val_folds, y, fold_indexes, subtype, network_
         if mean_score > best_result['best_score']:
             best_result = {'best_score': mean_score, 'best_params': params}
 
+        torch.cuda.empty_cache()
+
     print("\nBest hyperparameters identified.")
     print(f"\tBest concordance index: {best_result['best_score']:.4f}")
     print(f"\tOptimal parameter set: {best_result['best_params']}")
@@ -218,7 +222,7 @@ def grid_searches(X_train_folds, X_val_folds, y, fold_indexes, subtype, network_
 
 
 def cross_validate(X_train_folds, X_val_folds, y, fold_indexes, params, network_class, subtype, dataset_name):
-    print(f"\nRunning cross-validation for {network_class.__name__}\n")
+    print(f"Running cross-validation for {network_class.__name__}\n")
     cindex_scores = []
     brier_scores = []
     times_folds = []
@@ -248,7 +252,7 @@ def cross_validate(X_train_folds, X_val_folds, y, fold_indexes, params, network_
         log = model.fit(X_train_fold, y_train_fold,
                         batch_size=params['batch_size'], epochs=params['epochs'],
                         callbacks=[
-                            tt.callbacks.EarlyStopping(patience=25),
+                            tt.callbacks.EarlyStopping(patience=50),
                             lr_decay_cb
                         ],
                         verbose=False, val_data=(X_val_fold, y_val_fold))
@@ -256,8 +260,9 @@ def cross_validate(X_train_folds, X_val_folds, y, fold_indexes, params, network_
         _ = model.compute_baseline_hazards()
         surv_df = model.predict_surv_df(X_val_fold)
 
+        durations_test = y_val_fold[0].cpu().numpy()
         ev = EvalSurv(surv_df,
-                      y_val_fold[0].cpu().numpy(),
+                      durations_test,
                       y_val_fold[1].cpu().numpy(),
                       censor_surv='km')
 
@@ -265,17 +270,22 @@ def cross_validate(X_train_folds, X_val_folds, y, fold_indexes, params, network_
         cindex_scores.append(ev.concordance_td())
 
         # Brier score
-        times = surv_df.index.values
-        bs = ev.brier_score(times)
+        #time_grid = np.linspace(durations_test.min(), durations_test.max(), 100)
+        t_max = np.percentile(durations_test, 95)
+        time_grid = np.linspace(durations_test.min(), t_max, 100)
+        # times = surv_df.index.values
+        bs = ev.brier_score(time_grid)
         brier_scores.append(list(bs))
-        times_folds.append(list(times))
+        times_folds.append(list(time_grid))
 
         # Integrated Brier Score
-        ibs = ev.integrated_brier_score(times)
+        ibs = ev.integrated_brier_score(time_grid)
         ibs_scores.append(ibs)
 
         # Save model
         models.append(model)
+
+        torch.cuda.empty_cache()
 
     # Save times
     times_dict = {f"times_fold{i + 1}": [times_folds[i]] for i in range(len(times_folds))}
@@ -301,18 +311,18 @@ def cross_validate(X_train_folds, X_val_folds, y, fold_indexes, params, network_
                     index=False)
 
     for i, model in enumerate(models):
-        save_model(model, subtype, dataset_name, network_name=network_class.__name__)
+        save_model(model, subtype, dataset_name, network_name=network_class.__name__, index=i)
 
-    return models, fold_result, df_times
+    return models, fold_result
 
 
 # ------------------ SAVE MODEL ------------------
-def save_model(final_model, subtype, dataset_name, network_name, use_clinical=USE_CLINICAL):
+def save_model(final_model, subtype, dataset_name, network_name, index=0, use_clinical=USE_CLINICAL):
     clinical_tag = "clinical" if use_clinical else "no_clinical"
 
     dict_path = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
     os.makedirs(dict_path, exist_ok=True)
-    model_path = os.path.join(dict_path, f"{network_name}__{clinical_tag}.pth")
+    model_path = os.path.join(dict_path, f"{network_name}__{clinical_tag}__fold{index}.pth")
 
     torch.save(final_model.net.state_dict(), model_path)
 
@@ -340,7 +350,7 @@ def explanation_to_gene(ax, models, X_gpu, gene_cols, clinical_cols, file_path, 
         net = WrappedNet(model.net, DEVICE).to(DEVICE)
         net.eval()
 
-        bg_idx = np.random.choice(X.shape[0], min(100, X.shape[0]), replace=False)
+        bg_idx = np.random.choice(X.shape[0], min(300, X.shape[0]), replace=False)
         background = X[bg_idx]
 
         explainer = shap.GradientExplainer(net, background)
@@ -356,16 +366,21 @@ def explanation_to_gene(ax, models, X_gpu, gene_cols, clinical_cols, file_path, 
 
         # ---------------- split ----------------
         n_clinical = len(clinical_cols)
-        shap_clinical = shap_values[:, :n_clinical]
-        shap_vae = shap_values[:, n_clinical:]
+        n_genes = len(gene_cols)
+        shap_vae = shap_values[:, :n_genes]
+        shap_clinical = shap_values[:, n_genes:]
 
-        shap_full = np.concatenate([shap_clinical, shap_vae], axis=1)
+        shap_full = np.concatenate([shap_vae, shap_clinical], axis=1)
         all_shap_projected.append(shap_full)
+
+        del net
+        del explainer
+        torch.cuda.empty_cache()
 
     all_shap_projected = np.array(all_shap_projected)
     mean_abs_shap = np.mean(np.abs(all_shap_projected), axis=(0, 1))
 
-    feature_names = clinical_cols + gene_cols
+    feature_names = gene_cols + clinical_cols
 
     df = pd.DataFrame({
         "feature": feature_names,
@@ -373,12 +388,12 @@ def explanation_to_gene(ax, models, X_gpu, gene_cols, clinical_cols, file_path, 
     }).sort_values("mean_abs_shap", ascending=False)
 
     df.to_csv(file_path, index=False)
-    print(f"SHAP gene-level values saved to: {file_path}")
+    print(f"SHAP values saved to: {file_path}")
 
     # ---------------- plot ----------------
     top = df.head(top_k)[::-1]
     ax.barh(top["feature"], top["mean_abs_shap"], color="steelblue")
-    ax.set_title("Top Feature Importances (SHAP, gene-level)")
+    ax.set_title("Top Feature Importances (SHAP)")
     ax.set_xlabel("Mean |SHAP value|")
 
 
@@ -392,7 +407,7 @@ def explanation(ax, models, X_gpu, feature_names, file_path):
         net = WrappedNet(m.net, DEVICE).to(DEVICE)
         net.eval()
 
-        bg_idx = np.random.choice(X.shape[0], min(100, X.shape[0]), replace=False)
+        bg_idx = np.random.choice(X.shape[0], min(300, X.shape[0]), replace=False)
         background = X[bg_idx]
 
         # Explainer SHAP
@@ -448,7 +463,6 @@ def explanation(ax, models, X_gpu, feature_names, file_path):
 
 # ------------------- PLOTS -------------------
 def plots(models_n, best_res_n, X_gpu, times_csv_path, gene_cols, clinical_cols, results_dir, n=3):
-    
     # LOAD TIMES
     df_times = pd.read_csv(times_csv_path)
     times_folds = []
@@ -527,7 +541,7 @@ def plots(models_n, best_res_n, X_gpu, times_csv_path, gene_cols, clinical_cols,
     # MODEL n-LAYER → SHAP values
     # -----------------------------------------------------------
     explanation_to_gene(ax_explain, models_n, X_gpu, gene_cols, clinical_cols,
-                            results_dir + f"/shap_gene_{n}layers.csv")
+                        results_dir + f"/shap_gene_{n}layers.csv")
     plt.tight_layout(pad=1.0)
     plt.show()
     fig.savefig(results_dir + f"/results_{n}layers.png")
@@ -542,12 +556,12 @@ def main():
 
     datasets = [
         'miRNA/VAE_clinical_miRNA_normalized_log.csv',
-        #'miRNA/VAE_clinical_miRNA_normalized_quant.csv',
-        #'mRNA/VAE_clinical_mRNA_normalized_log.csv',
-        #'mRNA/VAE_clinical_mRNA_normalized_tpm_log.csv'
+        # 'miRNA/VAE_clinical_miRNA_normalized_quant.csv',
+        # 'mRNA/VAE_clinical_mRNA_normalized_log.csv',
+        # 'mRNA/VAE_clinical_mRNA_normalized_tpm_log.csv'
     ]
 
-    network_selected = 5
+    network_selected = 3
 
     # Create output dirs
     output_dir = os.path.join(ROOT, 'deepsurv_results')
@@ -571,12 +585,16 @@ def main():
 
         X, y = prepare_data(dataset)
 
-        gene_cols = [c for c in X.columns if c.startswith('hsa') or c.startswith('gene.')]
+        gene_cols = [c for c in X.columns if c.startswith('VAE_')]
         clinical_cols = [c for c in X.columns if c not in gene_cols]
 
         # ---------------- STRATIFIED K-FOLD ----------------
+        duration_bins = pd.qcut(y['duration'], q=4, labels=False)
+        stratify_col = y['event'].astype(str) + "_" + duration_bins.astype(str)
+
         kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
-        fold_indexes = list(kfold.split(X, y['event']))
+        #fold_indexes = list(kfold.split(X, y['event']))
+        fold_indexes = list(kfold.split(X, stratify_col))
 
         # ---------------- ON GPU ----------------
         X_gpu, y_gpu = data_to_gpu(X, y)
@@ -597,28 +615,32 @@ def main():
                 'hidden1': [128, 256, 512],
                 'hidden2': [32, 64, 128],
                 'dropout': [0.3, 0.5],
-                'epochs': [150, 300],
-                'lr': [0.05, 1e-2, 1e-3],
+                'epochs': [500],
+                'lr': [0.05, 1e-2, 1e-3, 5e-4],
                 'batch_size': [32, 64, 128],
-                'decay_lr': [0.003, 0.005]
+                'decay_lr': [0.001, 0.003, 0.005],
+                'weight_decay': [1e-4, 1e-3, 1e-5]
             }"""
+
             param_grid_3 = {
-                'hidden1': [256],
+                'hidden1': [128],
                 'hidden2': [32],
-                'dropout': [0.5],
-                'epochs': [300],
-                'lr': [0.01],
-                'batch_size': [64],
-                'decay_lr': [0.003]
+                'dropout': [0.3],
+                'epochs': [500],
+                'lr': [0.001],
+                'batch_size': [32],
+                'decay_lr': [0.001],
+                'weight_decay': [1e-4]
             }
+
             print("\nGrid search for best params...")
             gcv_best_3, gcv_results_3 = grid_searches(X_train_folds, X_val_folds, y_gpu, fold_indexes, subtype,
                                                       Net_3layers, param_grid_3, dataset_name)
 
             print("\nCross validation on best params...")
-            models_3, cv_results_3, df_times = cross_validate(X_train_folds, X_val_folds, y_gpu,
-                                                              fold_indexes, gcv_best_3['best_params'],
-                                                              Net_3layers, subtype, dataset_name)
+            models_3, cv_results_3 = cross_validate(X_train_folds, X_val_folds, y_gpu,
+                                                    fold_indexes, gcv_best_3['best_params'],
+                                                    Net_3layers, subtype, dataset_name)
 
             # ---------------- PLOTS ----------------
             results_dir = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
@@ -629,15 +651,10 @@ def main():
 
         else:
             # ---------------- 5 LAYERS ----------------
-            """param_grid_5 = {
-                'hidden1': [128, 256], 'hidden2': [64, 128], 'hidden3': [32, 64], 'hidden4': [8, 16, 32],
-                'dropout': [0.3, 0.5], 'lr': [0.05, 0.01, 0.001], 'batch_size': [32, 128],
-                'epochs': [300], 'decay_lr': [0.003, 0.005]
-            }"""
             param_grid_5 = {
-                'hidden1': [128], 'hidden2': [64, 128], 'hidden3': [32], 'hidden4': [16],
-                'dropout': [0.3], 'lr': [0.01], 'batch_size': [64],
-                'epochs': [150], 'decay_lr': [0.003]
+                'hidden1': [128, 256], 'hidden2': [64, 128], 'hidden3': [32, 64], 'hidden4': [8, 16, 32],
+                'dropout': [0.3, 0.5], 'lr': [0.05, 0.01, 0.001, 5e-4], 'batch_size': [32, 64, 128],
+                'epochs': [500], 'decay_lr': [0.003, 0.005], 'weight_decay': [1e-4, 1e-3, 1e-5]
             }
 
             print("\nGrid search for best params...")
@@ -645,9 +662,9 @@ def main():
                                                       Net_5layers, param_grid_5, dataset_name)
 
             print("\nCross validation on best params...")
-            models_5, cv_results_5, df_times = cross_validate(X_train_folds, X_val_folds, y_gpu,
-                                                              fold_indexes, gcv_best_5['best_params'],
-                                                              Net_5layers, subtype, dataset_name)
+            models_5, cv_results_5 = cross_validate(X_train_folds, X_val_folds, y_gpu,
+                                                    fold_indexes, gcv_best_5['best_params'],
+                                                    Net_5layers, subtype, dataset_name)
             # ---------------- PLOTS ----------------
             results_dir = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
             os.makedirs(os.path.dirname(results_dir), exist_ok=True)
