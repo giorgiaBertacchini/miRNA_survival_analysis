@@ -1,0 +1,15 @@
+{
+    "best_score": 0.7709272461352694,
+    "best_params": {
+        "batch_size": 64,
+        "decay_lr": 0.003,
+        "dropout": 0.5,
+        "epochs": 500,
+        "hidden1": 128,
+        "hidden2": 64,
+        "hidden3": 64,
+        "hidden4": 32,
+        "lr": 0.01,
+        "weight_decay": 0.0001
+    }
+}
