@@ -75,7 +75,6 @@ def explanation_to_gene(ax, models, X_gpu, gene_cols, clinical_cols, file_path, 
             shap_values = shap_values.detach().cpu().numpy()
 
         # ---------------- split ----------------
-        n_clinical = len(clinical_cols)
         n_genes = len(gene_cols)
         shap_vae = shap_values[:, :n_genes]
         shap_clinical = shap_values[:, n_genes:]
@@ -105,70 +104,6 @@ def explanation_to_gene(ax, models, X_gpu, gene_cols, clinical_cols, file_path, 
     ax.barh(top["feature"], top["mean_abs_shap"], color="steelblue")
     ax.set_title("Top Feature Importances (SHAP)")
     ax.set_xlabel("Mean |SHAP value|")
-
-
-def explanation(ax, models, X_gpu, feature_names, file_path):
-    print("Computing SHAP values for model ensemble...")
-    all_shap_values = []
-    X = X_gpu.detach().float().to(DEVICE)
-    weights = [1.0 / len(models)] * len(models)
-
-    for m in models:
-        net = WrappedNet(m.net, DEVICE).to(DEVICE)
-        net.eval()
-
-        bg_idx = np.random.choice(X.shape[0], min(300, X.shape[0]), replace=False)
-        background = X[bg_idx]
-
-        # Explainer SHAP
-        explainer = shap.GradientExplainer(net, background)
-        shap_values = explainer.shap_values(X)  # shape: (n_samples, n_features)
-
-        if isinstance(shap_values, list):
-            shap_values = shap_values[0]
-
-        shap_values = shap_values[:, :, 0]
-
-        if torch.is_tensor(shap_values):
-            shap_values = shap_values.detach().cpu().numpy()
-
-        all_shap_values.append(shap_values)
-
-    # Store all SHAP values and compute their mean across models
-    all_shap_values = np.array(all_shap_values)  # shape: (n_models, n_samples, n_features)
-    n_models, n_samples, n_features = all_shap_values.shape
-
-    rows = []
-    for m_idx in range(n_models):
-        for s_idx in range(n_samples):
-            for f_idx in range(n_features):
-                rows.append({
-                    "model_id": m_idx,
-                    "sample_id": s_idx,
-                    "feature": feature_names[f_idx],
-                    "shap_value": all_shap_values[m_idx, s_idx, f_idx]
-                })
-    df_shap = pd.DataFrame(rows)
-    df_shap.to_csv(file_path, index=False)
-    print(f"SHAP values saved to: {file_path}")
-
-    # Convert to numpy array
-    mean_shap_across_models = np.tensordot(weights, all_shap_values, axes=(0, 0))  # shape: (n_samples, n_features)
-
-    # Calc mean |SHAP| per feature
-    feature_names = list(feature_names)
-    mean_abs_shap = np.mean(np.abs(mean_shap_across_models), axis=0)
-
-    # Order features by importance
-    top_idx = np.argsort(mean_abs_shap)[::-1][:30]
-    top_values = mean_abs_shap[top_idx]
-    top_features = [str(feature_names[i]) for i in top_idx]
-
-    # Plot
-    ax.barh(top_features[::-1], top_values[::-1], color='skyblue')
-    ax.set_xlabel("Mean |SHAP value|")
-    ax.set_title("Top Feature Importances (SHAP) - DeepSurv")
-    ax.invert_yaxis()
 
 
 # ------------------- PLOTS -------------------
