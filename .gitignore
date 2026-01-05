@@ -18,3 +18,5 @@
 # Ignora file specifici di sistema
 .DS_Store
 Thumbs.db
+
+Presentation.ipynb
