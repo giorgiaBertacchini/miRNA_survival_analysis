@@ -1,0 +1,98 @@
+\begin{thebibliography}{}
+\expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
+\providecommand{\url}[1]{\href{#1}{#1}}
+\providecommand{\dodoi}[1]{doi:~\href{http://doi.org/#1}{\nolinkurl{#1}}}
+\providecommand{\doeprint}[1]{\href{http://ascl.net/#1}{\nolinkurl{http://ascl.net/#1}}}
+\providecommand{\doarXiv}[1]{\href{https://arxiv.org/abs/#1}{\nolinkurl{https://arxiv.org/abs/#1}}}
+
+% type= article
+\bibitem[{B. Bolstad {et~al.}(2003)Bolstad, Irizarry, Åstrand, \&
+  Speed}]{quantlognorm2003}
+Bolstad, B., Irizarry, R., Åstrand, M., \& Speed, T. 2003, \bibinfo{title}{A
+  Comparison of Normalization Methods for High Density Oligonucleotide Array
+  Data Based on Variance and Bias,} Bioinformatics, 19, 185,
+  \dodoi{10.1093/bioinformatics/19.2.185}
+
+% type= article
+\bibitem[{Y. Chen(2025)Chen}]{ChenYaoyu2025}
+Chen, Y. 2025, \bibinfo{title}{Applying Principal Component Analysis to
+  Optimize Feature Selection in Gene Expression Data: A Case Study on Cancer
+  Classification,} Theoretical and Natural Science, 92, 95,
+  \dodoi{10.54254/2753-8818/2025.21792}
+
+% type= article
+\bibitem[{ Deepali {et~al.}(2025)Deepali, Goel, \& Khandnor}]{Deepali2025}
+Deepali, Goel, N., \& Khandnor, P. 2025, \bibinfo{title}{DeepOmicsSurv: a deep
+  learning-based model for survival prediction of oral cancer,} Discov. Oncol.
+
+% type= article
+\bibitem[{F.~E. Harrell {et~al.}(1982)Harrell, Califf, Pryor, Lee, \&
+  Rosati}]{Cindex1982}
+Harrell, F.~E., Califf, R.~M., Pryor, D.~B., Lee, K.~L., \& Rosati, R.~A. 1982,
+  \bibinfo{title}{Evaluating the yield of medical tests.,} JAMA, 247 18, 2543.
+\newblock \url{https://api.semanticscholar.org/CorpusID:23344910}
+
+% type= article
+\bibitem[{R. Jardillier {et~al.}(2022)Jardillier, Koca, Chatelain, \&
+  Guyon}]{Jardillier2022}
+Jardillier, R., Koca, D., Chatelain, F., \& Guyon, L. 2022,
+  \bibinfo{title}{Prognosis of lasso-like penalized Cox models with tumor
+  profiling improves prediction over clinical data alone and benefits from
+  bi-dimensional pre-screening,} BMC Cancer, 22, 1045,
+  \dodoi{10.1186/s12885-022-10117-1}
+
+% type= article
+\bibitem[{L. Jiang {et~al.}(2024)Jiang, Xu, Bai, Liu, Gong, Wang, \&
+  Deng}]{Jiang2024-gm}
+Jiang, L., Xu, C., Bai, Y., {et~al.} 2024, \bibinfo{title}{Autosurv:
+  interpretable deep learning framework for cancer survival analysis
+  incorporating clinical and multi-omics data,} NPJ Precis. Oncol
+
+% type= article
+\bibitem[{J. Katzman {et~al.}(2018)Katzman, Shaham, Cloninger, Bates, Jiang, \&
+  Kluger}]{DeepSurv2018}
+Katzman, J., Shaham, U., Cloninger, A., {et~al.} 2018,
+  \bibinfo{title}{DeepSurv: Personalized treatment recommender system using a
+  Cox proportional hazards deep neural network,} BMC Medical Research
+  Methodology, 18, \dodoi{10.1186/s12874-018-0482-1}
+
+% type= inproceedings
+\bibitem[{B. Sch{\"o}lkopf {et~al.}(1997)Sch{\"o}lkopf, Smola, \&
+  M{\"u}ller}]{KernelPCA}
+Sch{\"o}lkopf, B., Smola, A., \& M{\"u}ller, K.-R. 1997, \bibinfo{title}{Kernel
+  principal component analysis,} in Artificial Neural Networks --- ICANN'97,
+  ed. W.~Gerstner, A.~Germond, M.~Hasler, \& J.-D. Nicoud (Berlin, Heidelberg:
+  Springer Berlin Heidelberg), 583--588
+
+% type= article
+\bibitem[{N. Simon {et~al.}(2011)Simon, Friedman, Hastie, \&
+  Tibshirani}]{ElasticNet2011}
+Simon, N., Friedman, J., Hastie, T., \& Tibshirani, R. 2011,
+  \bibinfo{title}{Regularization Paths for Cox's Proportional Hazards Model via
+  Coordinate Descent,} Journal of Statistical Software, 39,
+  \dodoi{10.18637/jss.v039.i05}
+
+% type= article
+\bibitem[{N.~K. Speicher \& N. Pfeifer(2017)Speicher \& Pfeifer}]{Speicher2017}
+Speicher, N.~K., \& Pfeifer, N. 2017, \bibinfo{title}{Towards multiple kernel
+  principal component analysis for integrative analysis of tumor samples,} J.
+  Integr. Bioinform.
+
+% type= article
+\bibitem[{R. Tibshirani(1997)Tibshirani}]{Lasso1997}
+Tibshirani, R. 1997, \bibinfo{title}{The lasso method for variable selection in
+  the Cox model,} Stat Med
+
+% type= article
+\bibitem[{V.~H.~H. Verweij~PJ(1994)Verweij~PJ}]{Ridge1994}
+Verweij~PJ, V. H.~H. 1994, \bibinfo{title}{Penalized likelihood in Cox
+  regression,} Stat Med
+
+% type= article
+\bibitem[{J. Yuan {et~al.}(2025)Yuan, Xu, Ye, \& Liu}]{Yuan2025}
+Yuan, J., Xu, P., Ye, Z., \& Liu, W. 2025, \bibinfo{title}{STmiR: A Novel
+  XGBoost-based framework for spatially resolved miRNA activity prediction in
+  cancer transcriptomics,} PLOS ONE, 20, 1,
+  \dodoi{10.1371/journal.pone.0322082}
+
+\end{thebibliography}
