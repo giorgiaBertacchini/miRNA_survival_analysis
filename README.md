@@ -1,4 +1,4 @@
-# The miRNA Signature: Analisi della Sopravvivenza nel Carcinoma Mammario
+# The miRNA Signature: Unveiling Breast Cancer Survival through different Cox Architectures
 
 This project presents a comparative study on breast cancer (TCGA-BRCA) survival prediction using microRNA (miRNA) and mRNA expression profiles. The primary objective is to validate miRNA as a reliable prognostic biomarker compared to the mRNA-based state-of-the-art, utilizing advanced high-dimensional Cox regression techniques.
 
