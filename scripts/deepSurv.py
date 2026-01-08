@@ -313,7 +313,7 @@ def main():
 
         if network_selected == 3:
             # 6. Network 3 LAYERS
-            """param_grid_3 = {
+            param_grid_3 = {
                 'hidden1': [64, 128, 256],
                 'hidden2': [16, 32, 64],
                 'dropout': [0.3, 0.5],
@@ -322,16 +322,6 @@ def main():
                 'batch_size': [32, 64],
                 'decay_lr': [0.003, 0.005],
                 'weight_decay': [1e-4, 1e-5]
-            }"""
-            param_grid_3 = {
-                'hidden1': [256],
-                'hidden2': [32],
-                'dropout': [0.5],
-                'epochs': [300],
-                'lr': [0.01],
-                'batch_size': [64],
-                'decay_lr': [0.003],
-                'weight_decay': [1e-5]
             }
 
             # 7. GRID SEARCH + CROSS-VALIDATION
@@ -357,11 +347,6 @@ def main():
                 'dropout': [0.3, 0.5], 'lr': [0.05, 0.01, 0.001, 5e-4], 'batch_size': [32, 16],
                 'epochs': [500], 'decay_lr': [0.003, 0.005], 'weight_decay': [1e-4, 1e-3, 1e-5]
             }
-            """param_grid_5 = {
-                'hidden1': [128], 'hidden2': [64, 128], 'hidden3': [32], 'hidden4': [16],
-                'dropout': [0.3], 'lr': [0.01], 'batch_size': [64],
-                'epochs': [150]
-            }"""
 
             # 7. GRID SEARCH + CROSS-VALIDATION
             print("\nGrid search for best params...")
