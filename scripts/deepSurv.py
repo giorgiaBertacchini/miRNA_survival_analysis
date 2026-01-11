@@ -20,7 +20,7 @@ from networks import Net_3layers, Net_5layers
 
 # Utils
 from deepSurv_utils import reproducibility, path_config, prepare_data, scale_data, data_to_gpu, create_model
-from deepSurv_utils import DecayLR, LrLogger, grid_searches, cross_validate
+from deepSurv_utils import grid_searches, cross_validate
 
 
 # Fix for scipy version compatibility
@@ -32,7 +32,7 @@ if not hasattr(scipy.integrate, "simps"):
 NUM_FOLDS = 9  # Number of CV folds
 SEED = 42  # Random seed for reproducibility
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-N_COMPONENTS = 50 #50  # Number of PCA components (increase for mRNA -> 200)
+N_COMPONENTS = 50  # Number of PCA components (increase for mRNA -> 200)
 GENE_STARTS_WITH = ("hsa", "gene.")  # Prefixes for gene/miRNA columns
 
 print(f"Running on device: {DEVICE}\n")
@@ -301,7 +301,6 @@ def main():
         stratify_col = y['event'].astype(str) + "_" + duration_bins.astype(str)
 
         kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
-        #fold_indexes = list(kfold.split(X, y['event']))
         fold_indexes = list(kfold.split(X, stratify_col))
 
         # 5. PCA
