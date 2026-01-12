@@ -59,15 +59,15 @@ The project compares three main architectures:
 
 3. Given the datasets, to reproduce the results, execute the 3 main scripts:
 
-    - For [ElasticNet+KPCA](scripts\cox_regression.py) 
+    - For [ElasticNet+KPCA](scripts/cox_regression.py) 
     ```bash 
     python cox_regression.py
     ```
-    - For [PCA+DeepSurv](scripts\deepSurv.py)
+    - For [PCA+DeepSurv](scripts/deepSurv.py)
     ```bash
     python deepSurv.py
     ```
-    - For [VAE+DeepSurv](scripts\deepSurv_with_VAE.py)
+    - For [VAE+DeepSurv](scripts/deepSurv_with_VAE.py)
     ```bash
     python deepSurv_with_VAE.py
     ```
