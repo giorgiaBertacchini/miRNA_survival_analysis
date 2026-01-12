@@ -11,8 +11,7 @@ import torchtuples as tt
 from pycox.models import CoxPH
 from pycox.evaluation import EvalSurv
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import StratifiedKFold, ParameterGrid
-import torch.optim as optim
+from sklearn.model_selection import ParameterGrid
 
 # Network custom architectures
 from networks import Net_3layers, Net_5layers
@@ -36,9 +35,7 @@ def path_config():
     base = os.path.basename(os.getcwd())
     list_path = os.getcwd().split(os.sep)
     list_path.pop()
-    # list.pop(list.index(base))
     ROOT = '\\'.join(list_path)
-    #ROOT = os.path.dirname(os.getcwd()) + "/mbulgarelli"
     DATA_PATH = os.path.join(ROOT, 'datasets/preprocessed')
 
     return ROOT, DATA_PATH
@@ -97,9 +94,13 @@ def create_model(X, params, network_class):
         net = Net_5layers(in_features, 1, params['hidden1'], params['hidden2'], params['hidden3'],
                           params['hidden4'], params['dropout'])
 
-    optimizer = optim.Adam(net.parameters(), lr=params['lr'], weight_decay=params.get('weight_decay', 1e-4))
-    model = CoxPH(net, tt.optim.Adam)
-    model.optimizer = optimizer
+    model = CoxPH(
+        net,
+        tt.optim.Adam(
+            lr=params['lr'],
+            weight_decay=params.get('weight_decay', 1e-4)
+        )
+    )
 
     return model
 
@@ -195,7 +196,7 @@ def grid_searches(X_train_pca_folds, X_val_pca_folds, y, fold_indexes, subtype, 
     net_name = network_class.__name__
     results = pd.DataFrame(results)
     results.to_csv(os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, f'gcv_results_{net_name}.csv'),
-        index=False)
+                   index=False)
 
     best_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name,
                              f'gcv_best_results_{net_name}.json')
@@ -231,7 +232,6 @@ def cross_validate(X_train_pca_folds, X_val_pca_folds, y, fold_indexes, params, 
         y_train_fold = (y[0][train_idx], y[1][train_idx])
         y_val_fold = (y[0][val_idx], y[1][val_idx])
 
-        # model = create_model(in_features, params, network_class)
         model = create_model(X_train_fold, params, network_class)
         lr_decay_cb = DecayLR(lr0=params['lr'], decay_rate=params['decay_lr'])
 
@@ -256,10 +256,8 @@ def cross_validate(X_train_pca_folds, X_val_pca_folds, y, fold_indexes, params, 
         cindex_scores.append(ev.concordance_td())
 
         # Brier score
-        #time_grid = np.linspace(durations_test.min(), durations_test.max(), 100)
         t_max = np.percentile(durations_test, 95)
         time_grid = np.linspace(durations_test.min(), t_max, 100)
-        # times = surv_df.index.values
         bs = ev.brier_score(time_grid)
         brier_scores.append(list(bs))
         times_folds.append(list(time_grid))

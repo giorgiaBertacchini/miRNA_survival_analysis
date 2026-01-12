@@ -20,7 +20,7 @@ from networks import Net_3layers, Net_5layers
 
 # Utils
 from deepSurv_utils import reproducibility, path_config, prepare_data, scale_data, data_to_gpu, create_model
-from deepSurv_utils import DecayLR, LrLogger, grid_searches, cross_validate
+from deepSurv_utils import grid_searches, cross_validate
 
 
 # Fix for scipy version compatibility
@@ -32,7 +32,7 @@ if not hasattr(scipy.integrate, "simps"):
 NUM_FOLDS = 9  # Number of CV folds
 SEED = 42  # Random seed for reproducibility
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-N_COMPONENTS = 50 #50  # Number of PCA components (increase for mRNA -> 200)
+N_COMPONENTS = 50  # Number of PCA components (increase for mRNA -> 200)
 GENE_STARTS_WITH = ("hsa", "gene.")  # Prefixes for gene/miRNA columns
 
 print(f"Running on device: {DEVICE}\n")
@@ -301,7 +301,6 @@ def main():
         stratify_col = y['event'].astype(str) + "_" + duration_bins.astype(str)
 
         kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
-        #fold_indexes = list(kfold.split(X, y['event']))
         fold_indexes = list(kfold.split(X, stratify_col))
 
         # 5. PCA
@@ -313,7 +312,7 @@ def main():
 
         if network_selected == 3:
             # 6. Network 3 LAYERS
-            """param_grid_3 = {
+            param_grid_3 = {
                 'hidden1': [64, 128, 256],
                 'hidden2': [16, 32, 64],
                 'dropout': [0.3, 0.5],
@@ -322,16 +321,6 @@ def main():
                 'batch_size': [32, 64],
                 'decay_lr': [0.003, 0.005],
                 'weight_decay': [1e-4, 1e-5]
-            }"""
-            param_grid_3 = {
-                'hidden1': [256],
-                'hidden2': [32],
-                'dropout': [0.5],
-                'epochs': [300],
-                'lr': [0.01],
-                'batch_size': [64],
-                'decay_lr': [0.003],
-                'weight_decay': [1e-5]
             }
 
             # 7. GRID SEARCH + CROSS-VALIDATION
@@ -357,11 +346,6 @@ def main():
                 'dropout': [0.3, 0.5], 'lr': [0.05, 0.01, 0.001, 5e-4], 'batch_size': [32, 16],
                 'epochs': [500], 'decay_lr': [0.003, 0.005], 'weight_decay': [1e-4, 1e-3, 1e-5]
             }
-            """param_grid_5 = {
-                'hidden1': [128], 'hidden2': [64, 128], 'hidden3': [32], 'hidden4': [16],
-                'dropout': [0.3], 'lr': [0.01], 'batch_size': [64],
-                'epochs': [150]
-            }"""
 
             # 7. GRID SEARCH + CROSS-VALIDATION
             print("\nGrid search for best params...")
