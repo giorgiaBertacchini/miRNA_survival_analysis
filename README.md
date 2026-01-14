@@ -78,3 +78,6 @@ The project compares three main architectures:
 NB:
 - Plots are automatically created from the results and placed in the same folders
 - In the ElasticNet plots the top left one represents the C-index scores obtained from the Random Search for the best alpha, and not from the final evaluation of the model with the best parameters. These latter results are not plotted and are only written inside the cv_results.txt files, and are the same that are in the tables of the paper appendix.
+
+## 📄 Paper / Technical Report
+You can find the full paper-style technical report describing the methodology, experimental setup, and results in detail at the following path: [The_miRNA_Signature__Unveiling_Breast_Cancer_Survival_through_different_Cox_Architectures.pdf](resources/The_miRNA_Signature__Unveiling_Breast_Cancer_Survival_through_different_Cox_Architectures.pdf)
