@@ -277,7 +277,7 @@ def main():
     network_selected = 3
 
     for dataset_file in datasets:
-        # 1. Load data
+        # Load data
         print("Preparing data...".center(100, '-'))
         dataset_name = os.path.basename(dataset_file).replace(".csv", "")
         dataset = pd.read_csv(os.path.join(DATA_PATH, dataset_file))
@@ -285,25 +285,24 @@ def main():
 
         print(f"\nProcessing dataset: {dataset_name}. Subtype: {subtype}")
 
-        # 2. Create necessary directories
+        # Create necessary directories
         os.makedirs(os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name), exist_ok=True)
         os.makedirs(os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name, 'models'), exist_ok=True)
 
-        # 3. Prepare X, y and scale data
+        # Prepare X, y and scale data
         X, y = prepare_data(dataset)
         X = scale_data(X, GENE_STARTS_WITH)
 
         gene_cols = [c for c in X.columns if c.startswith('hsa') or c.startswith('gene.')]
         clinical_cols = [c for c in X.columns if c not in gene_cols]
 
-        # 4. STRATIFIED K-FOLD
+        # STRATIFIED K-FOLD
         duration_bins = pd.qcut(y['duration'], q=4, labels=False)
         stratify_col = y['event'].astype(str) + "_" + duration_bins.astype(str)
 
         kfold = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=SEED)
         fold_indexes = list(kfold.split(X, stratify_col))
 
-        # 5. PCA
         X_pca, pca, _ = fit_transform_pca(X, n_components=N_COMPONENTS)
         X_pca_gpu, y_gpu = data_to_gpu(X_pca, y, DEVICE)
 
@@ -311,7 +310,7 @@ def main():
         X_val_pca_folds   = [X_pca_gpu[val_idx]   for _, val_idx   in fold_indexes]
 
         if network_selected == 3:
-            # 6. Network 3 LAYERS
+            # Network 3 LAYERS
             param_grid_3 = {
                 'hidden1': [64, 128, 256],
                 'hidden2': [16, 32, 64],
@@ -323,7 +322,6 @@ def main():
                 'weight_decay': [1e-4, 1e-5]
             }
 
-            # 7. GRID SEARCH + CROSS-VALIDATION
             print("\nGrid search for best params...")
             gcv_best_3, _ = grid_searches(X_train_pca_folds, X_val_pca_folds, y_gpu, fold_indexes, subtype, Net_3layers,
                                           param_grid_3, dataset_name, ROOT, DEVICE)
@@ -333,21 +331,20 @@ def main():
                                                     gcv_best_3['best_params'], Net_3layers, subtype, dataset_name, ROOT,
                                                     DEVICE)
 
-            # 8. PLOTS
+            # PLOTS
             results_dir = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
             times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
             pca_plot(pca, gene_cols, results_dir)
             plots(models_3, cv_results_3, pca, X_pca_gpu, times_csv_path, gene_cols, clinical_cols, results_dir, n=3)
 
         else:
-            # 6. Network 5 LAYERS
+            # Network 5 LAYERS
             param_grid_5 = {
                 'hidden1': [128, 256], 'hidden2': [64, 128], 'hidden3': [32, 64], 'hidden4': [8, 16, 32],
                 'dropout': [0.3, 0.5], 'lr': [0.05, 0.01, 0.001, 5e-4], 'batch_size': [32, 16],
                 'epochs': [500], 'decay_lr': [0.003, 0.005], 'weight_decay': [1e-4, 1e-3, 1e-5]
             }
 
-            # 7. GRID SEARCH + CROSS-VALIDATION
             print("\nGrid search for best params...")
             gcv_best_5, _ = grid_searches(X_train_pca_folds, X_val_pca_folds, y_gpu, fold_indexes, subtype, Net_5layers,
                                           param_grid_5, dataset_name, ROOT, DEVICE)
@@ -356,7 +353,7 @@ def main():
             models_5, cv_results_5 = cross_validate(X_train_pca_folds, X_val_pca_folds, y_gpu, fold_indexes,
                                                     gcv_best_5['best_params'], Net_5layers, subtype, dataset_name, ROOT,
                                                     DEVICE)
-            # 8. PLOTS
+            # PLOTS
             results_dir = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
             times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
             plots(models_5, cv_results_5, pca, X_pca_gpu, times_csv_path, gene_cols, clinical_cols, results_dir, n=5)

@@ -5,7 +5,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 import shap
-from sklearn.decomposition import PCA
 from sklearn.model_selection import StratifiedKFold
 from scipy.interpolate import interp1d
 import scipy.integrate
@@ -207,7 +206,7 @@ def main():
     network_selected = 3
 
     for dataset_file in datasets:
-        # 1. Load data
+        # Load data
         print("Preparing data...".center(100, '-'))
         dataset_name = os.path.basename(dataset_file).replace(".csv", "")
         dataset = pd.read_csv(os.path.join(DATA_PATH, dataset_file))
@@ -215,17 +214,17 @@ def main():
 
         print(f"\nProcessing dataset: {dataset_name}. Subtype: {subtype}")
 
-        # 2. Create necessary directories
+        # Create necessary directories
         os.makedirs(os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name), exist_ok=True)
         os.makedirs(os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name, 'models'), exist_ok=True)
 
-        # 3. Prepare X, y
+        # Prepare X, y
         X, y = prepare_data(dataset)
 
         gene_cols = [c for c in X.columns if c.startswith('VAE_')]
         clinical_cols = [c for c in X.columns if c not in gene_cols]
 
-        # 4. STRATIFIED K-FOLD
+        # STRATIFIED K-FOLD
         duration_bins = pd.qcut(y['duration'], q=4, labels=False)
         stratify_col = y['event'].astype(str) + "_" + duration_bins.astype(str)
 
@@ -239,7 +238,7 @@ def main():
 
         if network_selected == 3:
             # ---------------- 3 LAYERS ----------------
-            """param_grid_3 = {
+            param_grid_3 = {
                 'hidden1': [128, 256, 512],
                 'hidden2': [32, 64, 128],
                 'dropout': [0.3, 0.5],
@@ -248,20 +247,8 @@ def main():
                 'batch_size': [32, 64, 128],
                 'decay_lr': [0.001, 0.003, 0.005],
                 'weight_decay': [1e-4, 1e-3, 1e-5]
-            }"""
-
-            param_grid_3 = {
-                'hidden1': [128],
-                'hidden2': [32],
-                'dropout': [0.3],
-                'epochs': [500],
-                'lr': [0.001],
-                'batch_size': [32],
-                'decay_lr': [0.001],
-                'weight_decay': [1e-4]
             }
 
-            # 5. GRID SEARCH + CROSS-VALIDATION
             print("\nGrid search for best params...")
             gcv_best_3, gcv_results_3 = grid_searches(X_train_folds, X_val_folds, y_gpu, fold_indexes, subtype,
                                                       Net_3layers, param_grid_3, dataset_name, ROOT, DEVICE)
@@ -271,7 +258,7 @@ def main():
                                                     fold_indexes, gcv_best_3['best_params'],
                                                     Net_3layers, subtype, dataset_name, ROOT, DEVICE)
 
-            # 6. PLOTS
+            # PLOTS
             results_dir = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
             times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
             plots(models_3, cv_results_3, X_gpu, times_csv_path, gene_cols,
@@ -285,7 +272,6 @@ def main():
                 'epochs': [500], 'decay_lr': [0.003, 0.005], 'weight_decay': [1e-4, 1e-3, 1e-5]
             }
 
-            # 5. GRID SEARCH + CROSS-VALIDATION
             print("\nGrid search for best params...")
             gcv_best_5, gcv_results_5 = grid_searches(X_train_folds, X_val_folds, y_gpu, fold_indexes, subtype,
                                                       Net_5layers, param_grid_5, dataset_name, ROOT, DEVICE)
@@ -294,7 +280,7 @@ def main():
             models_5, cv_results_5 = cross_validate(X_train_folds, X_val_folds, y_gpu,
                                                     fold_indexes, gcv_best_5['best_params'],
                                                     Net_5layers, subtype, dataset_name, ROOT, DEVICE)
-            # 6. PLOTS
+            # PLOTS
             results_dir = os.path.join(ROOT, 'deepsurv_results', subtype, dataset_name)
             times_csv_path = os.path.join(ROOT, 'grid_searches', 'deepsurv', subtype, dataset_name, "times_by_fold.csv")
             plots(models_5, cv_results_5, X_gpu, times_csv_path, gene_cols,
